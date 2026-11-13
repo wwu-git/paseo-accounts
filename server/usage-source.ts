@@ -1,4 +1,5 @@
-import type { UsageReport, UsageWindow as PaseoWindow } from "@getpaseo/plugin/server/usage";
+import type { UsageReport, UsageBalance, UsageWindow as PaseoWindow } from "@getpaseo/plugin/server/usage";
+import { displayUsage } from "../shared/usage-policy";
 import { formatPlan } from "../shared/format";
 import type { Usage } from "../shared/model";
 import type { StoredAccount } from "./state";
@@ -16,6 +17,7 @@ function tone(used: number): PaseoWindow["tone"] {
 
 /** One account's last reading, in the shape of Paseo's Usage view. Never asks the provider again. */
 export function usageReport(account: StoredAccount, usage: Usage | undefined): UsageReport {
+  usage = displayUsage(usage);
   if (!account.signedIn) return { status: "error", error: "Signed out. Sign in again in Accounts." };
   if (!usage || (usage.windows.length === 0 && !usage.balances?.length)) return { status: "error", error: usage?.error ?? "No usage reading yet." };
   // The account-wide windows go in the summary; a provider that names none of them shows its first.
@@ -32,7 +34,7 @@ export function usageReport(account: StoredAccount, usage: Usage | undefined): U
   }));
   const plan = formatPlan(account.plan);
   const extra = usage.extra;
-  const balances = extra && extra.currency === "USD"
+  const balances: UsageBalance[] = extra && extra.currency === "USD"
     ? [{ id: "extra_usage", label: "Extra usage", used: extra.usedMinor / 10 ** extra.exponent, limit: extra.limitMinor / 10 ** extra.exponent, remaining: Math.max(0, extra.limitMinor - extra.usedMinor) / 10 ** extra.exponent, unit: "usd" as const }]
     : [];
   for (const balance of usage.balances ?? []) {
@@ -43,5 +45,7 @@ export function usageReport(account: StoredAccount, usage: Usage | undefined): U
       limit: balance.limitMinor === null ? null : balance.limitMinor / unit,
       remaining: balance.remainingMinor === null ? null : balance.remainingMinor / unit, unit: "usd" });
   }
-  return { status: "available", ...(plan ? { planLabel: plan } : {}), windows, ...(balances.length ? { balances } : {}) };
+  return { status: "available", ...(plan ? { planLabel: plan } : {}), windows, ...(balances.length ? { balances } : {}),
+    ...((usage.validUntil !== undefined || usage.routingEligible !== undefined) && (usage.error || usage.cached)
+      ? { details: [{ id: "usage_status", label: "Status", value: usage.error ?? "Cached usage; refresh for current data.", tone: "warning" as const }] } : {}) };
 }

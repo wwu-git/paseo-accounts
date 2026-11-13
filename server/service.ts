@@ -42,7 +42,7 @@ import {
 import { ActivityLog } from "./activity";
 import { sendAlert } from "./alerts";
 import { accountForecast, hostTimeZone, hostWhen, loadHistory, record, saveHistory, trend, type History } from "./history";
-import { assertCursorLaunch } from "./cursor";
+import { assertCursorLaunch, CursorAdapter, keyIdentity } from "./cursor";
 import { providerCommand } from "./binaries";
 import { FamilyResolver } from "./families";
 import { CONTINUED_FROM_LABEL, continueInNewAgent, type Continuation } from "./handoff";
@@ -470,7 +470,7 @@ export class Service {
     const seenBinding = state.bindings[request.agentId]?.accountId;
     const bindingChanged = decision.bind !== null && seenBinding !== decision.bind.accountId;
     const recorded = state.sessions[request.agentId];
-    const sessionChanged = interactive && (recorded?.accountId !== account.id || recorded?.cwd !== request.cwd);
+    const sessionChanged = interactive && (family === "cursor" || recorded?.accountId !== account.id || recorded?.cwd !== request.cwd);
     if (bindingChanged || sessionChanged) {
       await this.store.update((draft) => {
         // Don't overwrite a choice the user made while this decision was being taken.
@@ -478,7 +478,8 @@ export class Service {
           draft.bindings[request.agentId] = decision.bind;
         }
         if (interactive) {
-          draft.sessions[request.agentId] = { accountId: account.id, family, openedAt: new Date(now).toISOString(), cwd: request.cwd };
+          draft.sessions[request.agentId] = { accountId: account.id, family, openedAt: new Date(now).toISOString(), cwd: request.cwd,
+            ...(family === "cursor" && account.home && accountEnv.CURSOR_API_KEY ? { credentialIdentity: keyIdentity(accountEnv.CURSOR_API_KEY) } : {}) };
         }
       });
     }
@@ -539,6 +540,9 @@ export class Service {
     const state = await this.store.read();
     const accountId = this.runningOn(state, agentId, family);
     if (!accountId) return false;
+    const account = findAccount(state, accountId);
+    const adapter = this.adapters[family];
+    if (family === "cursor" && account?.home && adapter instanceof CursorAdapter) await adapter.rejectCredential(account.home, state.sessions[agentId]?.credentialIdentity);
     await this.refreshIdentity(accountId);
     return findAccount(await this.store.read(), accountId)?.signedIn === false;
   }

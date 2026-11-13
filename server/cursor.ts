@@ -26,9 +26,14 @@ export function assertCursorLaunch(command: Command, env: NodeJS.ProcessEnv): vo
 async function keyAt(home: string): Promise<string | null> {
   try {
     const raw = JSON.parse(await readFile(join(home, "auth.json"), "utf8"));
-    return typeof raw.apiKey === "string" && raw.apiKey.trim() ? raw.apiKey : null;
+    if (typeof raw.apiKey !== "string" || !raw.apiKey.trim()) return null;
+    const rejected = await readFile(join(home, "rejected.json"), "utf8").catch(() => "{}");
+    if (JSON.parse(rejected).identity === keyIdentity(raw.apiKey)) return null;
+    return raw.apiKey;
   } catch { return null; }
 }
+
+export function keyIdentity(key: string): string { return `cursor-key|${createHash("sha256").update(key).digest("hex")}`; }
 
 export function parseCursorStatus(raw: unknown): Identity {
   if (!raw || typeof raw !== "object") return unsigned();
@@ -84,12 +89,12 @@ export class CursorAdapter implements FamilyAdapter {
     const key = await keyAt(home);
     if (!key) throw new Error("Cursor account credential is missing. Add its API key again.");
     // Empty overrides are intentional: null inherits daemon values in this framework.
-    return { CURSOR_API_KEY: key, CURSOR_AUTH_TOKEN: "", CURSOR_API_ENDPOINT: ENDPOINT };
+    return { CURSOR_API_KEY: key, CURSOR_AUTH_TOKEN: "", AGENT_CLI_CREDENTIAL_STORE: "memory", CURSOR_API_ENDPOINT: ENDPOINT };
   }
   async identity(home: string | null): Promise<Identity> {
     if (home) {
       const key = await keyAt(home);
-      return key ? { ...unsigned(), signedIn: true, identity: `cursor-key|${createHash("sha256").update(key).digest("hex")}` } : unsigned();
+      return key ? { ...unsigned(), signedIn: true, identity: keyIdentity(key) } : unsigned();
     }
     try {
       const { command } = await providerCommand("cursor");
@@ -115,6 +120,13 @@ export class CursorAdapter implements FamilyAdapter {
       if (!response.ok) return unknown(`Cursor usage request failed (HTTP ${response.status}).`);
       return parseCursorUsage(await response.json());
     } catch { return unknown("Could not read Cursor usage. Previous data, if shown, is stale."); }
+  }
+  /** Only reject the credential actually launched, never a newly replaced key or the global CLI login. */
+  async rejectCredential(home: string, expectedIdentity: string | undefined): Promise<void> {
+    const key = await keyAt(home);
+    if (key && expectedIdentity === keyIdentity(key)) {
+      await writeJsonAtomic(join(home, "rejected.json"), { identity: keyIdentity(key) });
+    }
   }
   async redeemReset(): Promise<RedeemReply> { return { outcome: "none", message: "Cursor banked resets are not supported.", left: null }; }
   async login(home: string | null, _method: LoginMethod): Promise<LoginHandle> {
@@ -149,7 +161,7 @@ class CursorKeyLogin extends ProgressEmitter implements LoginHandle {
     const apiKey = code.trim();
     if (!apiKey || apiKey.length > 8192 || /\s/.test(apiKey)) throw new Error("Paste a valid Cursor user API key.");
     this.ended = true;
-    try { await writeJsonAtomic(join(this.home, "auth.json"), { apiKey }); this.settle({ ok: true, message: null }); }
+    try { await writeJsonAtomic(join(this.home, "auth.json"), { apiKey }); await rm(join(this.home, "rejected.json"), { force: true }); this.settle({ ok: true, message: null }); }
     catch { this.settle({ ok: false, message: "Could not save the Cursor credential." }); throw new Error("Could not save the Cursor credential."); }
   }
   cancel(): void { if (!this.ended) { this.ended = true; this.settle({ ok: false, message: "Sign-in was canceled." }); } }

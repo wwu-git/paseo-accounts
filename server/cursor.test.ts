@@ -19,6 +19,7 @@ describe("Cursor account isolation", () => {
     const env = await a.env(root);
     expect(env.CURSOR_API_KEY).toBe("key-for-second-account");
     expect(env.CURSOR_AUTH_TOKEN).toBe("");
+    expect(env.AGENT_CLI_CREDENTIAL_STORE).toBe("memory");
     expect(JSON.stringify(await a.identity(root))).not.toContain("key-for-second-account");
     await a.logout(root);
     await expect(a.env(root)).rejects.toThrow(/credential/i);

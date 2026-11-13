@@ -133,9 +133,9 @@ export function AddAccountModal({
       : "The account";
     body = (
       <>
-        <Text style={text.heading}>You're signed in</Text>
+        <Text style={text.heading}>{family === "cursor" ? "API key saved" : "You're signed in"}</Text>
         <Text style={text.body}>
-          {who} is ready. New {FAMILY_LABEL[family]} agents{multiHost ? ` on ${host.label}` : ""} can use it, and you can
+          {family === "cursor" ? `${who} is saved; Cursor validates the key when it next runs.` : `${who} is ready.`} New {FAMILY_LABEL[family]} agents{multiHost ? ` on ${host.label}` : ""} can use it, and you can
           move an agent to it from the account button in the message box.
         </Text>
         <Row>

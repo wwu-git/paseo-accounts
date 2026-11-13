@@ -19,11 +19,10 @@ async function setup() {
  const store = new StateStore(join(root,"state.json"));
  const account = (id: string, kind: "managed"|"main") => StoredAccountSchema.parse({ id, family:"cursor", label:id, kind, home:kind === "managed" ? home : null, createdAt:new Date().toISOString() });
  await store.update(d => {d.accounts=[account("cursor-main","main"),account("cursor-second","managed")]; d.defaults.cursor="cursor-second";});
- const cursor = { ...adapter, family: "cursor", portable: false, usageSpacingMs:0,
-   env: adapter.env.bind(adapter), prepareHome: adapter.prepareHome.bind(adapter), usage:async () => parseCursorUsage({planUsage:{totalPercentUsed:100}}),
- } as unknown as CursorAdapter;
- // Use real cursor methods with only usage's transport replaced.
- const adapters = Object.fromEntries(FAMILIES.map(f => [f, f === "cursor" ? cursor : adapter])) as ConstructorParameters<typeof Service>[0];
+ const cursor = Object.assign(Object.create(adapter) as CursorAdapter, { usageSpacingMs: 0,
+   usage: async () => parseCursorUsage({planUsage:{totalPercentUsed:100}}),
+ });
+ const adapters = Object.fromEntries(FAMILIES.map(f => [f, f === "cursor" ? cursor : adapter])) as unknown as ConstructorParameters<typeof Service>[0];
  const service = new Service(adapters, store);
  const created: Array<Record<string, unknown>>=[];
  const agents = [{ id:"chat",provider:"cursor",status:"idle",lastUserMessageAt:"2026-11-13",cwd:root,model:"auto",title:"Task",labels:{} }];
@@ -63,4 +62,53 @@ it("uses existing continuation for a Cursor conversation with history and labels
   expect(created[0]?.prompt).toContain("earlier Cursor session");
   expect(created[0]?.prompt).not.toContain("ChatGPT");
  } finally {service.stop();}
+});
+
+it("persists a managed key's confirmed authentication failure until the key is saved again",async()=>{
+ const {service,store,paseo,home}=await setup();
+ const context={paseo} as never;
+ await service.onSessionOpen({agentId:"chat",workspaceId:null,provider:"cursor",cwd:root,purpose:"interactive",reason:"create",env:{}},context);
+ try {
+  await service.onTurnEnded({agent:{id:"chat",provider:"cursor"},turnId:"turn",outcome:{kind:"failed",error:{code:"UNAUTHENTICATED",message:"Authentication required"}},timeline:[]} as never,context);
+  expect((await store.read()).accounts.find(a=>a.id==="cursor-second")?.signedIn).toBe(false);
+  expect((await new CursorAdapter().identity(home)).signedIn).toBe(false);
+  const login=await new CursorAdapter().login(home,"code");await login.submitCode("replacement-key");
+  expect((await new CursorAdapter().identity(home)).signedIn).toBe(true);
+ } finally {service.stop();}
+});
+
+it("confirms failed managed credentials after plugin reload using the persisted launch fingerprint",async()=>{
+ const {service,store,paseo}=await setup(); const context={paseo} as never;
+ await service.onSessionOpen({agentId:"chat",workspaceId:null,provider:"cursor",cwd:root,purpose:"interactive",reason:"create",env:{}},context);
+ service.stop();
+ const adapter=new CursorAdapter();
+ const adapters=Object.fromEntries(FAMILIES.map(f=>[f,adapter])) as unknown as ConstructorParameters<typeof Service>[0];
+ const reloaded=new Service(adapters,new StateStore(join(root,"state.json")));
+ try {
+   await reloaded.onTurnEnded({agent:{id:"chat",provider:"cursor"},turnId:"turn",outcome:{kind:"failed",error:{code:"UNAUTHENTICATED",message:"Authentication required"}},timeline:[]} as never,context);
+   expect((await new StateStore(join(root,"state.json")).read()).accounts.find(a=>a.id==="cursor-second")?.signedIn).toBe(false);
+ }finally{reloaded.stop();}
+});
+
+it("does not reject a replacement key when an old session reports authentication failure",async()=>{
+ const {service,store,paseo,home}=await setup(); const context={paseo} as never;
+ await service.onSessionOpen({agentId:"chat",workspaceId:null,provider:"cursor",cwd:root,purpose:"interactive",reason:"create",env:{}},context);
+ const login=await new CursorAdapter().login(home,"code");await login.submitCode("new-key");
+ try {
+  await service.onTurnEnded({agent:{id:"chat",provider:"cursor"},turnId:"turn",outcome:{kind:"failed",error:{code:"UNAUTHENTICATED",message:"Authentication required"}},timeline:[]} as never,context);
+  expect((await store.read()).accounts.find(a=>a.id==="cursor-second")?.signedIn).toBe(true);
+  expect((await new CursorAdapter().identity(home)).signedIn).toBe(true);
+ }finally{service.stop();}
+});
+
+it("updates the persisted fingerprint when the same account reopens with a replacement key",async()=>{
+ const {service,store,paseo,home}=await setup(); const context={paseo} as never;
+ const request={agentId:"chat",workspaceId:null,provider:"cursor",cwd:root,purpose:"interactive" as const,reason:"create" as const,env:{}};
+ try {
+   await service.onSessionOpen(request,context);
+   const before=(await store.read()).sessions.chat?.credentialIdentity;
+   const login=await new CursorAdapter().login(home,"code");await login.submitCode("new-key");
+   await service.onSessionOpen({...request,reason:"refresh"},context);
+   expect((await store.read()).sessions.chat?.credentialIdentity).not.toBe(before);
+ }finally{service.stop();}
 });

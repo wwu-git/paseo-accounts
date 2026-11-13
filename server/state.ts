@@ -48,6 +48,8 @@ export const LiveSessionSchema = z.object({
   accountId: z.string(),
   family: FamilySchema,
   openedAt: z.string(),
+  /** Non-secret fingerprint of a managed Cursor credential at launch, retained across plugin reloads. */
+  credentialIdentity: z.string().optional(),
   /** The agent's working folder, so folder rules apply when it reopens. */
   cwd: z.string().optional(),
 });

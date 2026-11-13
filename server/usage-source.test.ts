@@ -39,3 +39,12 @@ it("reports plan balances without pretending they are extra usage or percentages
   });
   expect(report).toMatchObject({ status: "available", windows: [], balances: [{ id: "plan_usage", used: 2, remaining: 18, limit: 20, unit: "usd" }] });
 });
+
+
+it("labels expired conditional readings in Paseo Usage without changing legacy reports", () => {
+  const report = usageReport(account({family:"cursor"}), {
+    fetchedAt: "2020-01-01T00:00:00Z", validUntil:"2020-01-01T00:05:00Z", routingEligible:false,
+    windows:[{id:"plan_usage",label:"Total",usedPercent:20,resetsAt:null}], error:null,cached:false,resets:null,
+  });
+  expect(report).toMatchObject({status:"available",details:[{label:"Status",value:expect.stringMatching(/stale/i)}]});
+});
