@@ -1,4 +1,5 @@
 import type { PluginHandlerContext } from "@getpaseo/plugin/server";
+import { assertCursorLaunch } from "./cursor";
 import { FAMILIES, type Family } from "../shared/model";
 
 type PaseoApi = PluginHandlerContext["paseo"];
@@ -23,6 +24,7 @@ const OWN_AUTH_KEYS: Record<Family, readonly string[]> = {
   kimi: ["KIMI_CODE_HOME", "KIMI_API_KEY", "KIMI_CODE_BASE_URL"],
   opencode: ["OPENCODE_AUTH_CONTENT", "OPENCODE_API_KEY", "XDG_DATA_HOME"],
   omp: [],
+  cursor: ["CURSOR_API_KEY", "CURSOR_AUTH_TOKEN", "CURSOR_API_ENDPOINT", "CURSOR_API_BASE_URL", "CURSOR_BACKEND_URL", "CURSOR_CONFIG_DIR", "XDG_CONFIG_HOME", "AGENT_CLI_CREDENTIAL_STORE"],
   pi: ["PI_CODING_AGENT_DIR", "ANTHROPIC_OAUTH_TOKEN", "ANTHROPIC_API_KEY"],
 };
 
@@ -41,6 +43,13 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
  * Maps Paseo provider IDs to the subscription family they run on: the built-in `claude` and `codex`
  * providers, plus custom profiles that extend them without their own credentials.
  */
+function cursorConfigSupported(entry: Record<string, unknown> | undefined): boolean {
+  const command = entry?.command;
+  if (command === undefined) return true;
+  if (!Array.isArray(command) || !command.length || !command.every(v => typeof v === "string")) return false;
+  try { assertCursorLaunch({ command: command[0]!, prefix: command.slice(1) }, {}); return true; } catch { return false; }
+}
+
 export function familiesFromConfig(providers: Record<string, unknown> | undefined): Record<string, Family> {
   const result: Record<string, Family> = {};
   const entries = providers ?? {};
@@ -48,7 +57,7 @@ export function familiesFromConfig(providers: Record<string, unknown> | undefine
   // family counts as that family whatever it extends.
   for (const family of FAMILIES) {
     const entry = asRecord(entries[family]);
-    if (!entry || !bringsOwnAuth(family, asRecord(entry.env))) result[family] = family;
+    if ((!entry || !bringsOwnAuth(family, asRecord(entry.env))) && (family !== "cursor" || cursorConfigSupported(entry))) result[family] = family;
   }
   for (const [id, value] of Object.entries(entries)) {
     if (isFamily(id)) continue;
@@ -56,6 +65,7 @@ export function familiesFromConfig(providers: Record<string, unknown> | undefine
     const base = entry?.extends;
     if (!isFamily(base)) continue;
     if (bringsOwnAuth(base, asRecord(entry?.env))) continue;
+    if (base === "cursor" && (!cursorConfigSupported(entry) || !cursorConfigSupported(asRecord(entries.cursor)))) continue;
     result[id] = base;
   }
   return result;
@@ -75,7 +85,7 @@ export class FamilyResolver {
       value = familiesFromConfig(asRecord(config.providers));
     } catch (error) {
       console.warn("[paseo-accounts] could not read provider config; using built-in providers only", describe(error));
-      value = Object.fromEntries(FAMILIES.map((family) => [family, family]));
+      value = Object.fromEntries(FAMILIES.filter(family => family !== "cursor").map((family) => [family, family]));
     }
     this.cache = { at: Date.now(), value };
     return value;

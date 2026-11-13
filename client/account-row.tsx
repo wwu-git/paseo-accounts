@@ -246,11 +246,17 @@ function AccountDetail({
     <View style={{ paddingLeft: indent, paddingRight: 14, paddingBottom: 14, paddingTop: 2, gap: 16 }}>
       {signedOut ? (
         <Text style={text.muted}>This account is signed out. Sign in again to use it.</Text>
-      ) : windows.length > 0 ? (
+      ) : windows.length > 0 || account.usage?.balances?.length ? (
         <View style={{ gap: 10 }}>
           {windows.map((limit) => (
             <UsageBar key={limit.id} theme={theme} limit={limit} />
           ))}
+          {(account.usage?.balances ?? []).map(balance => (
+            <Text key={balance.id} style={text.small}>
+              {balance.label} · {balance.remainingMinor === null ? "Remaining unknown" : `${balance.currency} ${(balance.remainingMinor / 10 ** balance.exponent).toFixed(balance.exponent)} left`}
+            </Text>
+          ))}
+          {account.family === "cursor" && windows.length > 0 ? <Text style={text.small}>Informational pools · not used for account switching</Text> : null}
           {account.usage?.extra ? (
             <Text style={text.small}>Extra usage · {formatExtra(account.usage.extra)}</Text>
           ) : null}

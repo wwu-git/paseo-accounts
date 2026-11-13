@@ -31,3 +31,11 @@ describe("Paseo usage source", () => {
     expect(usageKey("kimi:a b/c")).toBe("kimi-a-b-c");
   });
 });
+
+it("reports plan balances without pretending they are extra usage or percentages", () => {
+  const report = usageReport(account({ family: "cursor", plan: null }), {
+    fetchedAt: new Date().toISOString(), windows: [], error: null, cached: false, resets: null,
+    balances: [{ id: "plan_usage", label: "Plan usage", usedMinor: 200, limitMinor: 2000, remainingMinor: 1800, currency: "USD", exponent: 2 }],
+  });
+  expect(report).toMatchObject({ status: "available", windows: [], balances: [{ id: "plan_usage", used: 2, remaining: 18, limit: 20, unit: "usd" }] });
+});

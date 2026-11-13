@@ -17,7 +17,7 @@ function tone(used: number): PaseoWindow["tone"] {
 /** One account's last reading, in the shape of Paseo's Usage view. Never asks the provider again. */
 export function usageReport(account: StoredAccount, usage: Usage | undefined): UsageReport {
   if (!account.signedIn) return { status: "error", error: "Signed out. Sign in again in Accounts." };
-  if (!usage || usage.windows.length === 0) return { status: "error", error: usage?.error ?? "No usage reading yet." };
+  if (!usage || (usage.windows.length === 0 && !usage.balances?.length)) return { status: "error", error: usage?.error ?? "No usage reading yet." };
   // The account-wide windows go in the summary; a provider that names none of them shows its first.
   const summary = (id: string, index: number) => (SHORT[id] !== undefined || (index === 0 && !usage.windows.some((w) => SHORT[w.id])));
   const windows = usage.windows.map((window, index): PaseoWindow => ({
@@ -35,5 +35,13 @@ export function usageReport(account: StoredAccount, usage: Usage | undefined): U
   const balances = extra && extra.currency === "USD"
     ? [{ id: "extra_usage", label: "Extra usage", used: extra.usedMinor / 10 ** extra.exponent, limit: extra.limitMinor / 10 ** extra.exponent, remaining: Math.max(0, extra.limitMinor - extra.usedMinor) / 10 ** extra.exponent, unit: "usd" as const }]
     : [];
+  for (const balance of usage.balances ?? []) {
+    if (balance.currency !== "USD") continue;
+    const unit = 10 ** balance.exponent;
+    balances.push({ id: balance.id, label: balance.label,
+      used: balance.usedMinor === null ? null : balance.usedMinor / unit,
+      limit: balance.limitMinor === null ? null : balance.limitMinor / unit,
+      remaining: balance.remainingMinor === null ? null : balance.remainingMinor / unit, unit: "usd" });
+  }
   return { status: "available", ...(plan ? { planLabel: plan } : {}), windows, ...(balances.length ? { balances } : {}) };
 }

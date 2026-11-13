@@ -23,6 +23,7 @@ import {
   type StateView,
   type Usage,
 } from "../shared/model";
+import { displayUsage, routingUsage } from "../shared/usage-policy";
 import { formatResetIn, peakUsage } from "../shared/format";
 import { DEFAULT_CONTINUE_PROMPT, type Preferences } from "../shared/preferences";
 import type { RedeemResult, ReopenSummary } from "../shared/rpc";
@@ -41,6 +42,8 @@ import {
 import { ActivityLog } from "./activity";
 import { sendAlert } from "./alerts";
 import { accountForecast, hostTimeZone, hostWhen, loadHistory, record, saveHistory, trend, type History } from "./history";
+import { assertCursorLaunch } from "./cursor";
+import { providerCommand } from "./binaries";
 import { FamilyResolver } from "./families";
 import { CONTINUED_FROM_LABEL, continueInNewAgent, type Continuation } from "./handoff";
 import { removeHome } from "./homes";
@@ -68,7 +71,7 @@ import {
 type PaseoApi = PluginHookContext["paseo"];
 type TurnEnded = PluginLifecycleEvents["agent.turn_ended"];
 
-const PROVIDER_NAME: Record<Family, string> = { claude: "Claude Code", codex: "Codex", copilot: "Copilot CLI", kimi: "Kimi Code", opencode: "OpenCode", pi: "Pi", omp: "Oh My Pi" };
+const PROVIDER_NAME: Record<Family, string> = { claude: "Claude Code", codex: "Codex", copilot: "Copilot CLI", kimi: "Kimi Code", opencode: "OpenCode", pi: "Pi", omp: "Oh My Pi", cursor: "Cursor CLI" };
 /** How often to read usage: accounts in use, the defaults, and the rest. Adapters space reads further. */
 const USAGE_BUSY_MS = 60_000;
 const USAGE_DEFAULT_MS = 5 * 60_000;
@@ -227,7 +230,7 @@ export class Service {
   async usageReportFor(accountId: string): Promise<UsageReport> {
     const account = (await this.store.read()).accounts.find((candidate) => candidate.id === accountId);
     if (!account) return { status: "error", error: "This account was removed." };
-    return usageReport(account, this.usage.get(account.id));
+    return usageReport(account, displayUsage(this.usage.get(account.id)));
   }
 
   /** Remember the plugin's SDK connection for background work (cleanup, failover). */
@@ -419,6 +422,11 @@ export class Service {
     const family = (await this.families.resolve(context.paseo))[request.provider];
     if (!family) return undefined;
     const adapter = this.adapters[family];
+    if (family === "cursor") {
+      // Hooks only expose env, so resolver validates provider command config before this point.
+      assertCursorLaunch(await providerCommand("cursor"), { ...process.env, ...request.env });
+      if (request.env.CURSOR_API_KEY || request.env.CURSOR_AUTH_TOKEN) return undefined;
+    }
     const now = Date.now();
     let state = await this.store.read();
     const named = request.env[ACCOUNT_ENV]?.trim();
@@ -448,7 +456,7 @@ export class Service {
       autoSwitch: this.prefs.autoSwitch,
       balanceNewAgents: this.prefs.balanceNewAgents,
       portable: adapter.portable,
-      usageOf: (id) => this.usage.get(id),
+      usageOf: (id) => routingUsage(this.usage.get(id)),
       pick: this.pickOptions,
     });
     if (!decision) return undefined;
@@ -457,6 +465,7 @@ export class Service {
     if (account.kind === "managed" && account.home) {
       await adapter.prepareHome(account.home).catch((error: unknown) => log(`could not refresh the home of ${account.label}`, error));
     }
+    const accountEnv = await adapter.env(account.home);
     const interactive = request.purpose === "interactive";
     const seenBinding = state.bindings[request.agentId]?.accountId;
     const bindingChanged = decision.bind !== null && seenBinding !== decision.bind.accountId;
@@ -482,7 +491,7 @@ export class Service {
       })`,
     );
     // The account name is for us, not for the provider CLI.
-    return { ...request, env: applyEnv({ ...(await adapter.env(account.home)), [ACCOUNT_ENV]: null }, request.env) };
+    return { ...request, env: applyEnv({ ...accountEnv, [ACCOUNT_ENV]: null }, request.env) };
   }
 
   /** A turn uses the account from its first token, so a long one keeps its usage fresh too. */
@@ -760,14 +769,14 @@ export class Service {
         to: next.label,
         reason,
         outcome: "stayed",
-        detail: `New ChatGPT agents will use ${next.label}.`,
+        detail: `New ${FAMILY_LABEL[family]} agents will use ${next.label}.`,
       });
       return;
     }
     const why =
       reason === "limit"
-        ? `its ChatGPT account (${account.label}) reached its usage limit`
-        : `its ChatGPT account (${account.label}) was signed out`;
+        ? `its ${FAMILY_LABEL[family]} account (${account.label}) reached its usage limit`
+        : `its ${FAMILY_LABEL[family]} account (${account.label}) was signed out`;
     try {
       const continuation = await this.continueElsewhere(paseo, agentId, next, why, timeline, "auto");
       this.switchGuard.note(agentId, now);
@@ -799,7 +808,7 @@ export class Service {
   private async switchEarly(paseo: PaseoApi, agentId: string, family: Family, accountId: string): Promise<void> {
     const line = this.prefs.switchAt;
     if (!this.prefs.autoSwitch || line >= 100 || !this.adapters[family].portable || this.switching.has(agentId)) return;
-    const fullness = (id: string) => peakUsage(this.usage.get(id)?.windows ?? [])?.usedPercent ?? null;
+    const fullness = (id: string) => peakUsage(routingUsage(this.usage.get(id))?.windows ?? [])?.usedPercent ?? null;
     const used = fullness(accountId);
     if (used === null || used < line) return;
     const state = await this.store.read();
@@ -872,7 +881,7 @@ export class Service {
 
   /** The forecast and week's trend shown for an account. */
   private forecastOf(accountId: string): Pick<AccountView, "forecast" | "trend"> {
-    const usage = this.usage.get(accountId);
+    const usage = routingUsage(this.usage.get(accountId));
     const windows = this.history[accountId];
     const forecast = accountForecast(usage, windows);
     const shown = forecast?.windowId ?? (usage ? peakUsage(usage.windows)?.id : undefined);
@@ -897,7 +906,7 @@ export class Service {
 
   /** The account an automatic pick lands on, skipping `exclude`. */
   private pick(state: StoredState, family: Family, now: number, exclude: ReadonlySet<string> = new Set()): StoredAccount | undefined {
-    return mostAvailable(state, family, (id) => this.usage.get(id), now, exclude, this.pickOptions);
+    return mostAvailable(state, family, (id) => routingUsage(this.usage.get(id)), now, exclude, this.pickOptions);
   }
 
   async setPriority(accountId: string, priority: StoredAccount["priority"]): Promise<void> {
@@ -1316,6 +1325,7 @@ export class Service {
       sourceAgentId: agentId,
       timeline,
       why,
+      previous: FAMILY_LABEL[target.family],
       bind: async (newAgentId) => {
         await this.store.update((draft) => {
           draft.bindings[newAgentId] = {
@@ -1340,7 +1350,7 @@ export class Service {
       autoSwitch: this.prefs.autoSwitch,
       balanceNewAgents: false,
       portable: this.adapters[family].portable,
-      usageOf: (id) => this.usage.get(id),
+      usageOf: (id) => routingUsage(this.usage.get(id)),
       pick: this.pickOptions,
     })?.account.id;
   }
@@ -1487,9 +1497,11 @@ export class Service {
         );
       if (retryAt) this.usageRetryAt.set(accountId, retryAt);
       else this.usageRetryAt.delete(accountId);
-      this.setUsage(accountId, mergeUsage(this.usage.get(accountId), usage));
+      this.setUsage(accountId, account.family === "cursor"
+        ? usage.error && this.usage.has(accountId) ? { ...this.usage.get(accountId)!, error: usage.error, cached: true } : usage
+        : mergeUsage(this.usage.get(accountId), usage));
       // Only a live reading may change an account's limit state.
-      if (usage.windows.length === 0 || usage.error || usage.cached) return;
+      if (usage.windows.length === 0 || usage.error || usage.cached || !routingUsage(usage)) return;
       const now = Date.now();
       // Paid extra usage the user lets us spend keeps a full account usable; routing still ranks it after roomier ones.
       const paid = this.prefs.spendExtraUsage && extraLeft(usage.extra);
@@ -1520,7 +1532,7 @@ export class Service {
     if (usage) this.usage.set(accountId, usage);
     else this.usage.delete(accountId);
     // Fresh readings only: a cached copy would plot an old value at today's time.
-    if (usage && !usage.cached && !usage.error) record(this.history, accountId, usage);
+    if (usage && !usage.cached && !usage.error && routingUsage(usage)) record(this.history, accountId, usage);
     if (this.usageSave) return;
     this.usageSave = setTimeout(() => {
       this.usageSave = null;
@@ -1578,7 +1590,7 @@ export class Service {
         autoSwitch: this.prefs.autoSwitch,
         balanceNewAgents: this.prefs.balanceNewAgents,
         portable: this.adapters[family].portable,
-        usageOf: (id) => this.usage.get(id),
+        usageOf: (id) => routingUsage(this.usage.get(id)),
         pick: this.pickOptions,
       });
       if (next) nextUp[family] = next.account.id;
@@ -1597,7 +1609,7 @@ export class Service {
         status: !account.signedIn ? "signed_out" : account.disabled ? "disabled" : limited ? "limited" : "ready",
         isDefault: defaultAccount(state, account.family)?.id === account.id,
         limitedUntil: limited ? account.limitedUntil : null,
-        usage: this.usage.get(account.id) ?? null,
+        usage: displayUsage(this.usage.get(account.id)) ?? null,
         agentCount: counts.get(account.id) ?? 0,
         home: account.home,
         priority: account.priority,
@@ -1828,7 +1840,7 @@ export class Service {
     const info = await agentInfo(paseo, agentId);
     if (!info) throw new Error("That agent is no longer available.");
     const family = (await this.families.resolve(paseo))[info.provider];
-    if (!family) throw new Error(`${info.provider} agents don't use Claude or ChatGPT subscription accounts.`);
+    if (!family) throw new Error(`${info.provider} agents don't use plugin-managed subscription accounts.`);
     const adapter = this.adapters[family];
     const state = await this.store.read();
     const target = accountId ? findAccount(state, accountId) : defaultAccount(state, family);
@@ -1848,7 +1860,7 @@ export class Service {
           paseo,
           agentId,
           target,
-          `you moved the work to your ChatGPT account "${target.label}"`,
+          `you moved the work to your ${FAMILY_LABEL[family]} account "${target.label}"`,
           undefined,
           "user",
         );
@@ -1891,7 +1903,7 @@ export class Service {
       const info = await agentInfo(paseo, agentId);
       const family = info ? families[info.provider] : undefined;
       if (info && family && !this.adapters[family].portable && info.hasHistory) {
-        summary.skipped.push({ agentId, reason: "ChatGPT conversations move one at a time" });
+        summary.skipped.push({ agentId, reason: `${FAMILY_LABEL[family]} conversations move one at a time` });
         continue;
       }
       try {
@@ -1934,7 +1946,7 @@ export class Service {
       if (stranded.length > 0) {
         const one = stranded.length === 1;
         throw new Error(
-          `${stranded.length} ChatGPT conversation${one ? "" : "s"} still ${one ? "runs" : "run"} on ${account.label} and can't move to another account. Archive ${
+          `${stranded.length} ${FAMILY_LABEL[account.family]} conversation${one ? "" : "s"} still ${one ? "runs" : "run"} on ${account.label} and can't move to another account. Archive ${
             one ? "it" : "them"
           } (the work stays in your files) or continue ${one ? "it" : "them"} on another account from the account button, then remove ${account.label}.`,
         );

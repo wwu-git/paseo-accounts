@@ -227,6 +227,7 @@ function SignInSteps({
     setCodeError(null);
     try {
       await store.rpc(submitLoginCode, { loginId: login.id, code: value });
+      setCode("");
     } catch (error) {
       setCodeError(describe(error));
     } finally {
@@ -310,12 +311,13 @@ function SignInSteps({
         <Step
           theme={theme}
           number={2}
-          title={family === "opencode" ? "Create an API key there and paste it here" : "Paste the code shown after you sign in"}
+          title={(family === "opencode" || family === "cursor") ? "Create an API key there and paste it here" : "Paste the code shown after you sign in"}
         >
           <TextInput
             value={code}
             onChangeText={setCode}
-            placeholder="Paste code"
+            secureTextEntry={family === "cursor" || family === "opencode"}
+            placeholder={family === "cursor" || family === "opencode" ? "Paste API key" : "Paste code"}
             placeholderTextColor={theme.colors.foregroundMuted}
             autoCapitalize="none"
             autoCorrect={false}

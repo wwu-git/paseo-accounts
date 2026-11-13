@@ -32,7 +32,7 @@ export async function providerCommand(provider: Family): Promise<Command> {
     }
     cache = { at: Date.now(), value };
   }
-  return cache.value[provider] ?? { command: provider, prefix: [] };
+  return cache.value[provider] ?? { command: provider === "cursor" ? "agent" : provider, prefix: [] };
 }
 
 let browserShim: Promise<string | null> | null = null;

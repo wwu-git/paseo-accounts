@@ -262,7 +262,7 @@ function MoveModal({
     <Modal title={one ? `Move “${one.title ?? "agent"}”` : `Move ${agents.length} agents`} open onOpenChange={(open) => (open ? undefined : onClose(false))}>
       <Modal.Content>
         {one && !one.movable ? (
-          <Text style={text.muted}>This ChatGPT conversation can't change accounts in place; picking one continues it in a new agent.</Text>
+          <Text style={text.muted}>This conversation continues in a new agent when you pick another account.</Text>
         ) : null}
         <View style={{ gap: 6 }}>
           {option("default", "Follow the default", "", one ? !one.pinned : false, () => void choose(null))}

@@ -109,7 +109,7 @@ async function setUp(state: Partial<StoredState>, hit: () => LimitHit, options: 
   const families = { resolve: async () => ({ claude: "claude" as const }) };
   const claude = { ...claudeAdapter(hit), ...(options.detectLimit ? { detectLimit: options.detectLimit } : {}) };
   const service = new Service(
-    { claude, codex: claudeAdapter(hit), kimi: claudeAdapter(hit), opencode: claudeAdapter(hit), pi: claudeAdapter(hit), copilot: claudeAdapter(hit), omp: claudeAdapter(hit) },
+    { claude, codex: claudeAdapter(hit), kimi: claudeAdapter(hit), opencode: claudeAdapter(hit), pi: claudeAdapter(hit), copilot: claudeAdapter(hit), cursor: claudeAdapter(hit), omp: claudeAdapter(hit) },
     store,
     families as unknown as FamilyResolver,
     reopener as unknown as Reopener,
@@ -326,6 +326,7 @@ describe("forking to the other provider", () => {
         opencode: claudeAdapter(() => ({ kind: "window", resetsAt: null, message: "" })),
         pi: claudeAdapter(() => ({ kind: "window", resetsAt: null, message: "" })),
         copilot: claudeAdapter(() => ({ kind: "window", resetsAt: null, message: "" })),
+        cursor: claudeAdapter(() => ({ kind: "window", resetsAt: null, message: "" })),
         omp: claudeAdapter(() => ({ kind: "window", resetsAt: null, message: "" })),
       },
       store,
@@ -626,6 +627,7 @@ describe("forking further down the provider order", () => {
         pi: adapter("pi", room),
         copilot: adapter("copilot", room),
         omp: adapter("omp", room),
+        cursor: adapter("cursor", room),
       },
       store,
       { resolve: async () => ({ claude: "claude", codex: "codex", kimi: "kimi", pi: "pi" }) } as unknown as FamilyResolver,
@@ -776,7 +778,7 @@ describe("changing the default account", () => {
         opencode: claudeAdapter(hit),
         pi: claudeAdapter(hit),
         copilot: claudeAdapter(hit),
-        omp: claudeAdapter(hit),
+        cursor: claudeAdapter(hit), omp: claudeAdapter(hit),
       },
       store,
       { resolve: async () => ({ claude: "claude" as const, codex: "codex" as const }) } as unknown as FamilyResolver,

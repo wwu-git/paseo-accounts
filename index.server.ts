@@ -2,6 +2,7 @@ import type { PluginServerContext, PluginSettingsState } from "@getpaseo/plugin/
 import { z } from "zod";
 import { sendAlert } from "./server/alerts";
 import { ClaudeAdapter } from "./server/claude";
+import { CursorAdapter } from "./server/cursor";
 import { CodexAdapter } from "./server/codex";
 import { CopilotAdapter } from "./server/copilot";
 import { KimiAdapter } from "./server/kimi";
@@ -39,6 +40,7 @@ export default function contribute(server: PluginServerContext) {
     opencode: new OpenCodeAdapter(),
     pi: new PiAdapter(),
     omp: new OmpAdapter(),
+    cursor: new CursorAdapter(),
   });
 
   const settings = server.registerSettings(preferences);

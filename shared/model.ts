@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /** The subscription families this plugin manages. Custom provider profiles map onto one of them. */
-export const FamilySchema = z.enum(["claude", "codex", "copilot", "kimi", "opencode", "pi", "omp"]);
+export const FamilySchema = z.enum(["claude", "codex", "copilot", "kimi", "opencode", "pi", "omp", "cursor"]);
 export type Family = z.infer<typeof FamilySchema>;
 export const FAMILIES: readonly Family[] = FamilySchema.options;
 
@@ -13,6 +13,7 @@ export const FAMILY_LABEL: Record<Family, string> = {
   opencode: "OpenCode Go",
   pi: "Pi",
   omp: "Oh My Pi",
+  cursor: "Cursor",
 };
 
 /** Section headings on the Accounts screen. */
@@ -24,13 +25,14 @@ export const FAMILY_HEADING: Record<Family, string> = {
   opencode: "OpenCode Go",
   pi: "Pi",
   omp: "Oh My Pi",
+  cursor: "Cursor",
 };
 
 /**
  * Providers a stopped chat can carry on with when every account of its own is out, most preferred
  * first. The first one here that is installed and has a usable account takes over in a new agent.
  */
-export const FALLBACK_ORDER: readonly Family[] = ["claude", "codex", "kimi", "opencode", "copilot", "pi", "omp"];
+export const FALLBACK_ORDER: readonly Family[] = ["claude", "codex", "kimi", "opencode", "copilot", "pi", "omp", "cursor"];
 
 /** The providers a `from` agent can carry on with, most preferred first. */
 export function fallbackFamilies(from: Family): Family[] {
@@ -84,6 +86,10 @@ export function extraLeft(extra: ExtraUsage | null | undefined): boolean {
 }
 
 export const UsageSchema = z.object({
+  /** Optional limits for conditional providers; absent preserves existing behavior. */
+  routingEligible: z.boolean().optional(),
+  validUntil: z.string().optional(),
+  balances: z.array(z.object({ id: z.string(), label: z.string(), usedMinor: z.number().nullable(), limitMinor: z.number().nullable(), remainingMinor: z.number().nullable(), currency: z.string(), exponent: z.number() })).optional(),
   fetchedAt: z.string(),
   windows: z.array(UsageWindowSchema),
   /** Why usage could not be read, if it could not. Old windows may still be shown. */
