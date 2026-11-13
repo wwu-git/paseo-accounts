@@ -38,6 +38,10 @@ Paseo 用登录 access token 调用 `DashboardService/GetCurrentPeriodUsage`（`
 
 用量接入还需核对额度池与模型的关系、字段缺失、数据时效和重置周期。Paseo 当前使用 `billingCycleEnd`；官方资料区分旧套餐月度额度与新订阅周度额度，不能将账期结束一律当作额度重置时间。
 
+现有 `UsageSchema` 缺少普通套餐余额，`extra` 专指付费额外用量，`usageReport` 在无百分比窗口时直接报错。须局部扩展模型及展示以支持仅金额响应，不将套餐余额塞入 `extra`，也不为驱动排序强行换算百分比。
+
+明确用量有效期并按采样时间判断；查询失败、查询凭据失效或超过有效期时，旧值仅作带失效说明的展示，排序退回未知用量规则，不触发提前切换或生成新的耗尽预测。现有 `mergeUsage` 会保留旧窗口，`switchEarly` 未检查错误或时效，接入时须补齐判断，不能只复用百分比读取。
+
 ## 会话与自动切换
 
 官方提供 `--resume` 和 ACP `session/load`，但未确认跨账户恢复保证。`portable` 是适配器级开关，按验证结果选择路径，不新增逐次失败后的动态回退机制：
@@ -58,12 +62,12 @@ Paseo 用登录 access token 调用 `DashboardService/GetCurrentPeriodUsage`（`
 
 | 位置 | 改动 |
 | --- | --- |
-| `shared/model.ts`、`server/families.ts` | 增加 `cursor`、名称、认证覆盖识别和穷举映射，按现有顺序加入回退目标。 |
+| `shared/model.ts`、`server/families.ts` | 增加 `cursor`、名称、认证覆盖识别和穷举映射，按现有顺序加入回退目标；局部扩展普通套餐余额模型，与 `extra` 分开。 |
 | `server/adapter.ts`、新增 `server/cursor.ts` | 实现认证、密钥保存、环境注入、条件用量查询与未知状态、错误识别。 |
-| `server/usage-source.ts`、`server/history.ts`、`server/routing.ts` | 映射已验证用量至展示、趋势和选账户；金额余额与百分比按各自语义处理，复用现有算法。 |
+| `server/usage.ts`、`server/usage-source.ts`、`server/history.ts`、`server/routing.ts` | 支持仅金额展示；将保留展示的旧值与可用于排序、预测的数据区分，复用现有算法并补齐有效性判断。 |
 | `server/opencode.ts`、`server/json-file.ts` | 复用密钥登录和 `writeJsonAtomic`，补齐遮蔽输入与防回显。 |
 | `server/binaries.ts`、`index.server.ts` | 注册适配器并解析命令、前缀参数；区分 provider ID `cursor` 与通常名为 `agent` 的可执行文件。 |
-| `server/service.ts`、`server/handoff.ts` 与账户界面 | 接入现有路由、切换及交接，泛化供应商文案。 |
+| `server/service.ts`、`server/handoff.ts` 与账户界面 | 接入现有路由、切换及交接，提前切换前检查用量有效性，泛化供应商文案并显示失效状态。 |
 
 先确认目标 Paseo 的 Cursor provider 或自定义 ACP 配置可运行 `agent acp`。已有入口可用时只补配置；验收发现必须修改 Paseo 核心的兼容性缺口时，单独报告并确定范围。
 
@@ -82,7 +86,7 @@ Paseo 用登录 access token 调用 `DashboardService/GetCurrentPeriodUsage`（`
 | 基础接入 | 目标账户 Key 可用、认证及计费方式已确认；目标版本支持消息、工具权限、结束会话。 |
 | ACP 阻塞交互 | 分别触发 `cursor/ask_question`、`cursor/create_plan`，验证展示、用户回答或批准/拒绝、对应 JSON-RPC 响应和后续会话状态。这些请求会等待响应，普通消息测试不能替代；缺失支持须记录为核心兼容性缺口。 |
 | 账户与会话 | 覆盖范围表中的账户管理和路由，两个账户并行不串号；独立验证同账户及跨账户恢复，再验证选定路径下的手动、批量、自动切换与默认变更、删除/禁用协调，交接来源正确。 |
-| 用量与提前切换 | 完成上述查询和隔离验证；核对百分比、金额单位、额度池、重置周期、缺失/过期数据及拒绝访问。可靠样本驱动预测，门槛满足后验证阈值切换；未知数据不触发。 |
+| 用量与提前切换 | 完成查询和隔离验证，核对百分比、金额单位、额度池和重置周期；仅金额响应可展示且不冒充额外用量或百分比。覆盖首次未知及“曾成功、随后失败/凭据失效/过期”：旧值有失效说明、排序退回未知、不触发提前切换或新预测；恢复有效读数后再按门槛启用。 |
 | 自动与回退 | 真实脱敏样本验证限额/认证失效识别及误触发防护；检查限次、耗尽账户排除、继续开关、跨供应商交接和权限匹配。 |
 | 凭据与端点 | 三处配置来源分别及组合测试，核对实际子进程环境、正常账户选择和拒绝注入；覆盖参数形式与无法确认目标的包装器。拒绝路径使用占位密钥，不向自定义端点发送真实密钥。 |
 | 安全与回归 | 文件权限、防回显符合要求；执行类型检查和受影响测试，其他供应商行为不回归。 |
