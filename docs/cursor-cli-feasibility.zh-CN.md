@@ -1,7 +1,7 @@
 # Cursor CLI 多账户管理接入可行性调研
 
 - 日期：2026-11-13
-- 项目：Paseo Accounts（`@jgreys/paseo-accounts`）
+- 项目：[Paseo Accounts（wwu-git/paseo-accounts）](https://github.com/wwu-git/paseo-accounts)
 - 代码基线：`b7e043fdb7c92087c70727a1d7b0155e0b6d6ac3`
 - 范围：Paseo 内启动的 Cursor CLI 会话，不涉及 Cursor IDE 或普通终端启动包装命令。
 - 状态：调研与实现建议，尚未实现或批准；未进行真实账户集成测试。
