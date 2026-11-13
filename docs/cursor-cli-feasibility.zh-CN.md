@@ -4,7 +4,7 @@
 - 项目：[Paseo Accounts（wwu-git/paseo-accounts）](https://github.com/wwu-git/paseo-accounts)
 - 代码基线：`b7e043fdb7c92087c70727a1d7b0155e0b6d6ac3`
 - 范围：Paseo 内启动的 Cursor CLI 会话，不涉及 Cursor IDE 或普通终端启动包装命令。
-- 状态：调研与实现建议，尚未实现或批准；未进行真实账户集成测试。
+- 状态：已按用户指令接入基础能力并安装 dev-ubuntu；条件能力与未覆盖项见 [本机交付记录](cursor-cli-dev-ubuntu-delivery.zh-CN.md)。未完成真实双账户集成测试。
 
 ## 结论与范围
 

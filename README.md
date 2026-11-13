@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/wwu-git/paseo-accounts/actions/workflows/ci.yml/badge.svg)](https://github.com/wwu-git/paseo-accounts/actions/workflows/ci.yml)
 
-Use several Claude, ChatGPT (Codex), GitHub Copilot, Kimi Code, OpenCode Go, Pi and Oh My Pi subscriptions side by side in [Paseo](https://paseo.sh), without logging in and out of the CLI.
+Use several Claude, ChatGPT (Codex), GitHub Copilot, Kimi Code, OpenCode Go, Pi, Oh My Pi and Cursor subscriptions side by side in [Paseo](https://paseo.sh), without logging in and out of the CLI.
 
 ![Paseo Accounts](images/accounts-dark.png)
 
@@ -110,6 +110,16 @@ Oh My Pi keeps several accounts per provider itself and switches between them wh
 - **Add account** opens opencode.ai/auth: create a key there and paste it, the same as `opencode auth login` does for Go.
 - The key is kept in the account's own folder (mode 600). Sessions get it through `OPENCODE_AUTH_CONTENT`, layered over your other OpenCode sign-ins, so your chat history and other providers stay as they are. Paseo runs a separate OpenCode server for agents on an added account.
 - OpenCode Go doesn't publish usage, so the cards show none. Limit errors still trigger a switch.
+
+### Cursor CLI
+
+- Requires Paseo with a working Cursor/ACP provider and the official `agent` or `cursor-agent` CLI. Tested locally with Paseo 0.15.4 and Cursor CLI 2026.10.16-e3cb207 on Linux.
+- Your existing CLI login appears automatically. **Add account → Cursor** accepts a Cursor user API key from the official dashboard; saving a key does not validate its plan or billing.
+- Added key accounts use Cursor's in-memory credential store, so they do not reuse or overwrite your terminal login. Select accounts, defaults, priorities and project folders through the existing Accounts controls.
+- Cross-account session restore is unverified. A conversation with history moves by starting a new agent with the conversation transcript; batch moves skip those conversations, as with Codex. Existing history stays pinned when defaults change.
+- CLI file-logins on Linux can show usage from Cursor's official endpoint. Key accounts show usage as unknown. Percentages describe separate pools and are informational: they do not mark the whole account limited, drive forecasts or trigger early switching. Stale readings are labelled.
+- Automatic failover recognizes explicit Cursor usage-limit/authentication failures. Ordinary rate limits and network errors do not trigger it. Real dual-account and quota-exhaustion testing remains outstanding.
+- Profiles with their own credentials, custom endpoints or unsupported wrapper commands are not managed. Multiple browser logins and ordinary terminal account wrappers are not included.
 
 ### Before the limit, restart check and alerts
 

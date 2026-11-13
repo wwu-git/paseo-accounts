@@ -10,7 +10,7 @@ Run Claude Code, Codex and other agents on several of your own subscriptions at 
 - **In Paseo's Usage view.** Every account appears in Paseo's own Usage view and `paseo usage` (Paseo 0.12+).
 - **Named accounts for scripts.** `paseo run --env PASEO_ACCOUNT=Work …` starts an agent on that account.
 - **Claude extra usage.** See the paid budget left, and optionally use it once every other account is full.
-- **Seven providers.** Claude, ChatGPT (Codex), GitHub Copilot, Kimi Code, OpenCode Go, Pi and Oh My Pi.
+- **Eight providers.** Claude, ChatGPT (Codex), GitHub Copilot, Kimi Code, OpenCode Go, Pi, Oh My Pi and Cursor CLI.
 - **Fork to another provider (optional).** When every account of a provider is out, the chat can carry on with another provider, with the conversation so far.
 - **Alerts (optional).** Get an ntfy or webhook message when accounts run out or need attention.
 

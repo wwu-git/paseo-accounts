@@ -22,3 +22,10 @@ On macOS 26 with Paseo 0.12, Claude Code 2.1 and several Claude Ultra accounts, 
 - Linux and Windows hosts, and daemons with a password.
 
 If something here doesn't work for you, please [open an issue](https://github.com/wwu-git/paseo-accounts/issues) with your Paseo and CLI versions.
+
+
+## Cursor CLI on dev-ubuntu
+
+On Linux x86_64 with Paseo 0.15.4 and Cursor CLI 2026.10.16-e3cb207, verified the existing CLI login status, official usage query (HTTP 200), installed plugin state RPC and plugin running status. No real model prompt was sent. ACP initialization and one empty session creation succeeded; cross-process restoration of that empty session was rejected, and a later session creation timed out. This does not establish restoration of a persisted conversation.
+
+Automated tests cover key persistence/cancellation, memory-store isolation settings, command and endpoint rejection, source labels on continuation, display-only pools, amount-only balances, stale reports, and authentication rejection across plugin reloads and key replacement. No second real Cursor account was supplied, so actual dual-account routing, model tools, full question/plan interactions, quota exhaustion and cross-account restore remain unverified. Browser multi-login, usage queries for API key accounts and quota-based early switching are disabled.

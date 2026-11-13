@@ -1,7 +1,7 @@
 {
   "name": "@jgreys/paseo-accounts",
   "version": "1.1.0",
-  "description": "Use several Claude, ChatGPT and other AI subscriptions side by side in Paseo, and switch automatically when one hits its limit.",
+  "description": "Use several Claude, ChatGPT, Cursor and other AI subscriptions side by side in Paseo, and switch automatically when one hits its limit.",
   "keywords": [
     "paseo",
     "paseo-plugin",
@@ -13,6 +13,7 @@
     "accounts",
     "usage-limits",
     "kimi",
+    "cursor",
     "copilot",
     "opencode",
     "multi-account"
