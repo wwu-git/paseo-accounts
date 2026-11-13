@@ -17,13 +17,13 @@
     "opencode",
     "multi-account"
   ],
-  "homepage": "https://github.com/jgreys/paseo-accounts#readme",
+  "homepage": "https://github.com/wwu-git/paseo-accounts#readme",
   "bugs": {
-    "url": "https://github.com/jgreys/paseo-accounts/issues"
+    "url": "https://github.com/wwu-git/paseo-accounts/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jgreys/paseo-accounts.git"
+    "url": "git+https://github.com/wwu-git/paseo-accounts.git"
   },
   "license": "MIT",
   "author": "Greys",

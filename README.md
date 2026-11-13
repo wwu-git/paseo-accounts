@@ -1,6 +1,6 @@
 # Paseo Accounts
 
-[![CI](https://github.com/jgreys/paseo-accounts/actions/workflows/ci.yml/badge.svg)](https://github.com/jgreys/paseo-accounts/actions/workflows/ci.yml) [![npm](https://img.shields.io/npm/v/@jgreys/paseo-accounts)](https://www.npmjs.com/package/@jgreys/paseo-accounts)
+[![CI](https://github.com/wwu-git/paseo-accounts/actions/workflows/ci.yml/badge.svg)](https://github.com/wwu-git/paseo-accounts/actions/workflows/ci.yml)
 
 Use several Claude, ChatGPT (Codex), GitHub Copilot, Kimi Code, OpenCode Go, Pi and Oh My Pi subscriptions side by side in [Paseo](https://paseo.sh), without logging in and out of the CLI.
 
@@ -32,26 +32,16 @@ Requirements:
 - Paseo 0.11.0 or later, with plugins enabled (**Settings → Plugins → Enable plugins**).
 - The `claude` and/or `codex` CLI installed where the daemon runs, the same ones Paseo already uses.
 
-Install it from the Paseo plugin directory (or **Paseo Cafe**):
+Install this repository from a checkout:
 
 ```bash
-paseo plugin add jgreys/accounts
-```
-
-npm gets new versions before the directory has reviewed them:
-
-```bash
-paseo plugin install npm:@jgreys/paseo-accounts
-```
-
-To run it from a checkout instead:
-
-```bash
-git clone https://github.com/jgreys/paseo-accounts.git ~/projects/paseo-accounts
+git clone https://github.com/wwu-git/paseo-accounts.git ~/projects/paseo-accounts
 paseo plugin install ~/projects/paseo-accounts
 ```
 
 After pulling or editing a checkout, apply changes with `paseo plugin reload paseo-accounts`.
+
+The plugin directory entry `jgreys/accounts` and npm package `@jgreys/paseo-accounts` are upstream distribution channels; they do not install this repository’s changes.
 
 Then open **Accounts** in the sidebar.
 
@@ -214,7 +204,7 @@ Security reports: see [SECURITY.md](SECURITY.md).
 ## Development
 
 ```bash
-git clone https://github.com/jgreys/paseo-accounts.git
+git clone https://github.com/wwu-git/paseo-accounts.git
 cd paseo-accounts
 npm install
 paseo plugin install "$(pwd)"   # run the working copy
@@ -232,7 +222,7 @@ Code layout:
 - `server/`: routing, account homes, Claude and Codex adapters, failover.
 - `shared/`: RPC contracts and the view model.
 
-Report problems at [github.com/jgreys/paseo-accounts/issues](https://github.com/jgreys/paseo-accounts/issues).
+Report problems at [github.com/wwu-git/paseo-accounts/issues](https://github.com/wwu-git/paseo-accounts/issues).
 
 ## Uninstall
 

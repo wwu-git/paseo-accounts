@@ -21,4 +21,4 @@ On macOS 26 with Paseo 0.12, Claude Code 2.1 and several Claude Ultra accounts, 
 - Forks to another provider, and banked resets.
 - Linux and Windows hosts, and daemons with a password.
 
-If something here doesn't work for you, please [open an issue](https://github.com/jgreys/paseo-accounts/issues) with your Paseo and CLI versions.
+If something here doesn't work for you, please [open an issue](https://github.com/wwu-git/paseo-accounts/issues) with your Paseo and CLI versions.

@@ -2,7 +2,7 @@
 
 ## Reporting a problem
 
-Please report security problems privately through GitHub: **Security → Report a vulnerability** on [jgreys/paseo-accounts](https://github.com/jgreys/paseo-accounts/security/advisories/new). Don't open a public issue for them. You'll get an answer within a week.
+Please report security problems privately through GitHub: **Security → Report a vulnerability** on [wwu-git/paseo-accounts](https://github.com/wwu-git/paseo-accounts/security/advisories/new). Don't open a public issue for them. You'll get an answer within a week.
 
 ## What the plugin can reach
 
