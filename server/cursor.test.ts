@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, stat, writeFile, mkdir } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CursorAdapter, assertCursorLaunch, parseCursorStatus, parseCursorUsage } from "./cursor";
+import { CursorAdapter, assertCursorLaunch, keyIdentity, parseCursorStatus, parseCursorUsage } from "./cursor";
 
 let root: string;
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), "accounts-cursor-")); });
@@ -31,13 +31,93 @@ describe("Cursor account isolation", () => {
     await expect(login.submitCode("do-not-save")).rejects.toThrow(/expired|cancel/i);
     await expect(readFile(join(root, "auth.json"))).rejects.toThrow();
   });
-  it("does not borrow the global login to query a managed API key account", async () => {
-    const fetcher = vi.fn(); vi.stubGlobal("fetch", fetcher);
+  it("uses only a managed account's own key and temporary token to query usage", async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({accessToken:"temporary-second-token",refreshToken:"never-save-this"})))
+      .mockResolvedValueOnce(new Response(JSON.stringify({planUsage:{totalPercentUsed:37}})));
+    vi.stubGlobal("fetch", fetcher);
+    vi.stubEnv("CURSOR_API_KEY","unrelated-parent-key");
+    vi.stubEnv("CURSOR_AUTH_TOKEN","unrelated-parent-token");
     const a = new CursorAdapter();
     await a.prepareHome(root);
     const login = await a.login(root, "code"); await login.submitCode("my-key");
-    expect((await a.usage(root)).error).toMatch(/API key|login/i);
-    expect(fetcher).not.toHaveBeenCalled();
+    const usage=await a.usage(root);
+    expect(usage).toMatchObject({error:null,routingEligible:false,sourceId:expect.stringMatching(/^cursor-key\|/),windows:[{usedPercent:37}]});
+    expect(fetcher.mock.calls[0]).toMatchObject(["https://api2.cursor.sh/auth/exchange_user_api_key",{method:"POST",headers:{Authorization:"Bearer my-key"},redirect:"error"}]);
+    expect(fetcher.mock.calls[1]).toMatchObject(["https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage",{headers:{Authorization:"Bearer temporary-second-token"},redirect:"error"}]);
+    expect(await readFile(join(root,"auth.json"),"utf8")).toBe('{\n  "apiKey": "my-key"\n}\n');
+    expect(JSON.stringify(usage)).not.toMatch(/my-key|temporary-second-token|never-save-this/);
+  });
+});
+
+describe("managed Cursor usage", () => {
+  async function saved(home=root,key="test-managed-key") {
+    const adapter=new CursorAdapter(); await adapter.prepareHome(home);
+    const login=await adapter.login(home,"code"); await login.submitCode(key); return adapter;
+  }
+
+  it.each([401,403,429,500])("does not query usage or expose a failed exchange body (HTTP %s)",async status=>{
+    const fetcher=vi.fn().mockResolvedValue(new Response("private-error-payload",{status}));vi.stubGlobal("fetch",fetcher);
+    const adapter=await saved();const usage=await adapter.usage(root);
+    expect(usage.error).toContain(`HTTP ${status}`);expect(usage.windows).toEqual([]);
+    expect(JSON.stringify(usage)).not.toContain("private-error-payload");expect(fetcher).toHaveBeenCalledTimes(1);
+    expect((await adapter.identity(root)).signedIn).toBe(true);
+  });
+
+  it.each([null,{}, {accessToken:""},{accessToken:"bad token"},{accessToken:12}])("rejects invalid exchanged credentials without a usage request: %j",async body=>{
+    const fetcher=vi.fn().mockResolvedValue(Response.json(body));vi.stubGlobal("fetch",fetcher);
+    const adapter=await saved();expect((await adapter.usage(root)).error).toMatch(/invalid/);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not expose network error messages or persist temporary credentials",async()=>{
+    const fetcher=vi.fn().mockRejectedValue(new Error("private-network-error"));vi.stubGlobal("fetch",fetcher);
+    const adapter=await saved();const usage=await adapter.usage(root);
+    expect(usage.error).toMatch(/Could not read/);expect(JSON.stringify(usage)).not.toContain("private-network-error");
+    expect(JSON.parse(await readFile(join(root,"auth.json"),"utf8"))).toEqual({apiKey:"test-managed-key"});
+  });
+
+  it("uses independent exchanges and cache scopes for two accounts",async()=>{
+    const fetcher=vi.fn(async(url:string,options:RequestInit)=>{
+      const auth=(options.headers as Record<string,string>).Authorization ?? "";
+      if(url.endsWith("exchange_user_api_key"))return Response.json({accessToken:auth.endsWith("test-first-key")?"first-token":"second-token"});
+      return Response.json({planUsage:{totalPercentUsed:auth.endsWith("first-token")?11:72}});
+    });vi.stubGlobal("fetch",fetcher);
+    const second=join(root,"second");const adapter=await saved(root,"test-first-key");await saved(second,"test-second-key");
+    const [first,last]=await Promise.all([adapter.usage(root),adapter.usage(second)]);
+    expect(first.windows[0]?.usedPercent).toBe(11);expect(last.windows[0]?.usedPercent).toBe(72);
+    expect(first.sourceId).not.toBe(last.sourceId);expect(fetcher).toHaveBeenCalledTimes(4);
+  });
+
+  it("discards an in-flight result when its API key is replaced",async()=>{
+    const adapter=await saved();
+    const fetcher=vi.fn().mockResolvedValueOnce(Response.json({accessToken:"first-token"})).mockImplementationOnce(async()=>{
+      await writeFile(join(root,"auth.json"),JSON.stringify({apiKey:"replacement-key"}));
+      return Response.json({planUsage:{totalPercentUsed:66}});
+    });vi.stubGlobal("fetch",fetcher);
+    const usage=await adapter.usage(root);expect(usage.windows).toEqual([]);
+    expect(usage.sourceId).toBeUndefined();expect(usage.error).toMatch(/changed/);
+  });
+
+  it("does not exchange a rejected key",async()=>{
+    const adapter=await saved();await adapter.rejectCredential(root,keyIdentity("test-managed-key"));
+    const fetcher=vi.fn();vi.stubGlobal("fetch",fetcher);
+    expect((await adapter.usage(root)).windows).toEqual([]);expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("does not send a managed key when inherited endpoint configuration is unsafe",async()=>{
+    const adapter=await saved();vi.stubEnv("CURSOR_API_ENDPOINT","https://example.org");
+    const fetcher=vi.fn();vi.stubGlobal("fetch",fetcher);
+    expect((await adapter.usage(root)).windows).toEqual([]);expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it.skipIf(process.platform!=="linux")("continues to query the CLI login directly without a key exchange",async()=>{
+    vi.stubEnv("XDG_CONFIG_HOME",root);vi.stubEnv("CURSOR_API_KEY","");vi.stubEnv("CURSOR_AUTH_TOKEN","");
+    vi.stubEnv("AGENT_CLI_CREDENTIAL_STORE","file");
+    await mkdir(join(root,"cursor"));await writeFile(join(root,"cursor","auth.json"),JSON.stringify({accessToken:"test-cli-token"}));
+    const fetcher=vi.fn().mockResolvedValue(Response.json({planUsage:{totalPercentUsed:42}}));vi.stubGlobal("fetch",fetcher);
+    const usage=await new CursorAdapter().usage(null);
+    expect(usage).toMatchObject({error:null,sourceId:expect.stringMatching(/^cursor-cli\|/),windows:[{usedPercent:42}]});
+    expect(fetcher).toHaveBeenCalledTimes(1);expect(fetcher.mock.calls[0]?.[0]).toContain("GetCurrentPeriodUsage");
   });
 });
 

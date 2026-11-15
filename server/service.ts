@@ -1493,7 +1493,8 @@ export class Service {
       if (retryAt) this.usageRetryAt.set(accountId, retryAt);
       else this.usageRetryAt.delete(accountId);
       this.setUsage(accountId, account.family === "cursor"
-        ? usage.error && this.usage.has(accountId) ? { ...this.usage.get(accountId)!, error: usage.error, cached: true } : usage
+        ? usage.error && usage.sourceId && this.usage.get(accountId)?.sourceId === usage.sourceId
+          ? { ...this.usage.get(accountId)!, error: usage.error, cached: true } : usage
         : mergeUsage(this.usage.get(accountId), usage));
       // Only a live reading may change an account's limit state.
       if (usage.windows.length === 0 || usage.error || usage.cached || !routingUsage(usage)) return;

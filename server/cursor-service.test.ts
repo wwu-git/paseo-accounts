@@ -33,8 +33,23 @@ async function setup() {
      create:async (request: Record<string, unknown>) => {created.push(request);},
      ref:() => ({refresh:async () => ({agent:agents[0]}),timeline:{refetch:async () => ({entries:[]}),append:async()=>{} }})},
  };
- return {service,store,created,paseo,home};
+ return {service,store,created,paseo,home,cursor};
 }
+
+it("preserves failed Cursor usage only for the same credential source",async()=>{
+ const {service,cursor}=await setup();
+ const good={...parseCursorUsage({planUsage:{totalPercentUsed:37}}),sourceId:"cursor-key|one"};
+ cursor.usage=async()=>good;
+ try {
+   await service.refreshUsage("cursor-main",true);
+   cursor.usage=async()=>({...good,windows:[],error:"offline"});
+   await service.refreshUsage("cursor-main",true);
+   expect(await service.usageReportFor("cursor-main")).toMatchObject({status:"available",windows:[{usedPct:37}],details:[{label:"Status",value:"offline"}]});
+   cursor.usage=async()=>({...good,sourceId:"cursor-key|two",windows:[],error:"new key unavailable"});
+   await service.refreshUsage("cursor-main",true);
+   expect(await service.usageReportFor("cursor-main")).toEqual({status:"error",error:"new key unavailable"});
+ } finally {service.stop();}
+});
 
 it("routes a new Cursor process to only its selected key and records the binding",async()=>{
  const {service,store,paseo}=await setup();

@@ -104,22 +104,52 @@ export class CursorAdapter implements FamilyAdapter {
     } catch { return unsigned(); }
   }
   async usage(home: string | null): Promise<UsageRead> {
-    const unknown = (error: string): UsageRead => ({ fetchedAt: new Date().toISOString(), windows: [], error, cached: false, resets: null, routingEligible: false });
-    if (home) return unknown("Usage needs this account's CLI login; API key accounts do not borrow the global login.");
-    if (process.env.CURSOR_API_KEY || process.env.CURSOR_AUTH_TOKEN) return unknown("Usage for environment credentials is not available.");
-    try {
+    let sourceId: string | undefined;
+    let isCurrent: (() => Promise<boolean>) | undefined;
+    const unknown = (error: string): UsageRead => ({ fetchedAt: new Date().toISOString(), windows: [], error, cached: false, resets: null, routingEligible: false, ...(sourceId ? { sourceId } : {}) });
+    const query = async (): Promise<UsageRead> => {
       assertCursorLaunch(await providerCommand("cursor"), process.env);
-      const path = mainAuthPath();
-      if (!path) return unknown("Cursor CLI file login usage is supported on Linux only.");
-      const auth = JSON.parse(await readFile(path, "utf8"));
-      if (typeof auth.accessToken !== "string" || !auth.accessToken) return unknown("Cursor CLI login is unavailable.");
+      let accessToken: string;
+      if (home) {
+        const key = await keyAt(home);
+        if (!key) return unknown("Cursor account credential is unavailable. Add its API key again.");
+        sourceId = keyIdentity(key);
+        isCurrent = async () => await keyAt(home) === key;
+        const exchange = await fetch(`${ENDPOINT}/auth/exchange_user_api_key`, {
+          method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+          body: "{}", redirect: "error", signal: AbortSignal.timeout(15_000),
+        });
+        if (!exchange.ok) return unknown(`Cursor credential exchange failed (HTTP ${exchange.status}).`);
+        const auth: unknown = await exchange.json();
+        const token = auth && typeof auth === "object" ? (auth as Record<string,unknown>).accessToken : null;
+        if (typeof token !== "string" || !token.trim() || /\s/.test(token)) return unknown("Cursor returned an invalid credential exchange response.");
+        // Never persist the exchange response or refresh token, or use another account's login.
+        accessToken = token;
+      } else {
+        if (process.env.CURSOR_API_KEY || process.env.CURSOR_AUTH_TOKEN) return unknown("Usage for environment credentials is not available.");
+        const path = mainAuthPath();
+        if (!path) return unknown("Cursor CLI file login usage is supported on Linux only.");
+        const auth = JSON.parse(await readFile(path, "utf8"));
+        if (typeof auth.accessToken !== "string" || !auth.accessToken) return unknown("Cursor CLI login is unavailable.");
+        accessToken = auth.accessToken;
+        sourceId = `cursor-cli|${createHash("sha256").update(accessToken).digest("hex")}`;
+        isCurrent = async () => JSON.parse(await readFile(path,"utf8")).accessToken === accessToken;
+      }
       const response = await fetch(`${ENDPOINT}/aiserver.v1.DashboardService/GetCurrentPeriodUsage`, {
-        method: "POST", headers: { Authorization: `Bearer ${auth.accessToken}`, "Content-Type": "application/json", "Connect-Protocol-Version": "1" },
+        method: "POST", headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json", "Connect-Protocol-Version": "1" },
         body: "{}", redirect: "error", signal: AbortSignal.timeout(15_000),
       });
       if (!response.ok) return unknown(`Cursor usage request failed (HTTP ${response.status}).`);
-      return parseCursorUsage(await response.json());
-    } catch { return unknown("Could not read Cursor usage. Previous data, if shown, is stale."); }
+      return { ...parseCursorUsage(await response.json()), sourceId };
+    };
+    let reading: UsageRead;
+    try { reading = await query(); }
+    catch { reading = unknown("Could not read Cursor usage. Previous data, if shown, is stale."); }
+    if (isCurrent && !await isCurrent().catch(() => false)) {
+      sourceId = undefined;
+      return unknown("Cursor credentials changed during the query. Refresh usage again.");
+    }
+    return reading;
   }
   /** Only reject the credential actually launched, never a newly replaced key or the global CLI login. */
   async rejectCredential(home: string, expectedIdentity: string | undefined): Promise<void> {
