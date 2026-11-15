@@ -6,6 +6,16 @@ const account = (patch: Record<string, unknown> = {}) =>
   StoredAccountSchema.parse({ id: "claude-abc", family: "claude", label: "Work", kind: "managed", home: "/h", plan: "ultra", createdAt: "2026-11-01T00:00:00Z", ...patch });
 
 describe("Paseo usage source", () => {
+  it("attributes display-only Console usage in the native Usage view", () => {
+    const report=usageReport(account({family:"opencode"}), {
+      fetchedAt:new Date().toISOString(),routingEligible:false,sourceLabel:"OpenCode Console · Work (wrk-one)",
+      windows:[{id:"five_hour",label:"5-hour",usedPercent:24,resetsAt:null}],error:null,cached:false,resets:null,
+    });
+    expect(report).toMatchObject({status:"available",details:expect.arrayContaining([
+      {id:"usage_source",label:"Source",value:"OpenCode Console · Work (wrk-one)"},
+      {id:"usage_scope",label:"Scope",value:expect.stringContaining("not used for account switching")},
+    ])});
+  });
   it("reports the last reading with the account-wide windows in the summary", () => {
     const report = usageReport(account(), {
       fetchedAt: "2026-11-01T00:00:00Z",

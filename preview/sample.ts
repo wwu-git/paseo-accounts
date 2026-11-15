@@ -21,7 +21,7 @@ export const sample: StateView = {
     { ...base, id: "claude-k", family: "claude", label: "Team", email: "team@example.com", plan: "max", status: "limited", limitedUntil: iso(48), agentCount: 0, priority: "last", usage: usage([["five_hour", "5-hour", 100, 48], ["seven_day", "Weekly", 87, 2 * 1440]]) },
     { ...base, id: "codex-main", family: "codex", label: "ChatGPT (CLI login)", kind: "main", status: "signed_out", isDefault: true, usage: null },
     { ...base, id: "kimi-main", family: "kimi", label: "Main", kind: "main", plan: "Ultra", status: "ready", isDefault: true, agentCount: 1, usage: usage([["five_hour", "5-hour", 0.3, 60], ["month", "Monthly", 15.3, 9 * 1440]]) },
-    { ...base, id: "opencode-main", family: "opencode", label: "OpenCode Go 1", kind: "main", plan: "Go", status: "ready", isDefault: true, usage: { ...usage([]), error: "OpenCode Go doesn't report usage to other apps." } },
+    { ...base, id: "opencode-main", family: "opencode", label: "OpenCode Go 1", kind: "main", plan: "Go", status: "ready", isDefault: true, usage: { ...usage([["five_hour","5-hour",24,90],["seven_day","Weekly",7,1440],["monthly","Monthly",41,9*1440]]), routingEligible:false, sourceId:"opencode-console|preview", sourceLabel:"OpenCode Console · Preview workspace (wrk-preview)", validUntil:iso(4) } },
   ],
   agents: [
     { agentId: "a1", provider: "claude", title: "Fix checkout rounding bug", cwd: "~/code/storefront", status: "running", family: "claude", accountId: "claude-main", pinned: false, pendingAccountId: null, movable: true },

@@ -146,15 +146,13 @@ export function useStore(store: AccountsStore): StoreSnapshot {
 }
 
 /**
- * The providers the Accounts screen shows: a provider shows once it's in use (it runs agents, or has
- * an account you added). The rest are one tap away in Add account, so they don't cost a section each.
- * Before anything is in use (a fresh install), it shows the logins that work.
+ * Show providers with active agents, added accounts, or a ready CLI login. A CLI-only provider
+ * must stay visible alongside managed accounts even when it has no active agents.
  */
 export function shownFamilies(state: StateView | null): Family[] {
-  const inUse = FAMILIES.filter(
+  return FAMILIES.filter(
     (family) =>
       state?.agents.some((agent) => agent.family === family && agent.status !== "closed") ||
-      state?.accounts.some((account) => account.family === family && account.kind !== "main"),
+      state?.accounts.some((account) => account.family === family && (account.kind !== "main" || account.status === "ready")),
   );
-  return inUse.length > 0 ? inUse : FAMILIES.filter((family) => state?.accounts.some((a) => a.family === family && a.status === "ready"));
 }

@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { UsageSchema, type Usage } from "../shared/model";
+import { routingUsage } from "../shared/usage-policy";
 import { readJson, writeJsonAtomic } from "./json-file";
 import { dataDir } from "./paths";
 
@@ -22,6 +23,7 @@ export function retryDelayMs(retryAfter: string | null, now: number = Date.now()
  * when several do, the fullest one.
  */
 export function showLimit(usage: Usage, resetsAt: string | null): Usage {
+  if (!routingUsage(usage)) return usage;
   const at = resetsAt ? Date.parse(resetsAt) : Number.NaN;
   if (!Number.isFinite(at)) return usage;
   let match = -1;
@@ -36,13 +38,24 @@ export function showLimit(usage: Usage, resetsAt: string | null): Usage {
   };
 }
 
+/** Model cooldowns may only use allowance attributed to that model account. */
+export function resetFromUsage(reading: Usage | undefined): string | null {
+  const usage = routingUsage(reading);
+  if (!usage || usage.cached) return null;
+  const full = usage.windows.filter(window => window.usedPercent >= 99 && window.resetsAt);
+  full.sort((a, b) => Date.parse(b.resetsAt ?? "") - Date.parse(a.resetsAt ?? ""));
+  return full[0]?.resetsAt ?? null;
+}
+
 /**
  * The reading to show after a refresh. A failed or rate-limited refresh keeps the last windows, and
  * the CLI's own cached copy only replaces a reading it is newer than.
  */
 export function mergeUsage(previous: Usage | undefined, next: Usage): Usage {
+  // Scoped CLI readings must not survive a workspace change, disconnect, or an unidentifiable source.
+  if (previous?.sourceId !== next.sourceId) return next;
   if (!previous || previous.windows.length === 0) return next;
-  if (next.windows.length === 0) return { ...previous, error: next.error };
+  if (next.windows.length === 0) return { ...previous, error: next.error, cached: previous.sourceId ? true : previous.cached };
   if (next.cached && Date.parse(next.fetchedAt) <= Date.parse(previous.fetchedAt)) return previous;
   // Claude's own cached copy has no extra-usage budget; keep the last one we read.
   return next.cached && !next.extra && previous.extra ? { ...next, extra: previous.extra } : next;

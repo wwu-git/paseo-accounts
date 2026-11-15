@@ -109,7 +109,9 @@ Oh My Pi keeps several accounts per provider itself and switches between them wh
 
 - **Add account** opens opencode.ai/auth: create a key there and paste it, the same as `opencode auth login` does for Go.
 - The key is kept in the account's own folder (mode 600). Sessions get it through `OPENCODE_AUTH_CONTENT`, layered over your other OpenCode sign-ins, so your chat history and other providers stay as they are. Paseo runs a separate OpenCode server for agents on an added account.
-- OpenCode Go doesn't publish usage, so the cards show none. Limit errors still trigger a switch.
+- **OpenCode 2 usage:** the CLI login card reads the selected Console workspace's rolling 5-hour, weekly and monthly Go allowance through the local CLI API. Connect the Console with `opencode auth login opencode`, choose the account/workspace with your Go subscription, then refresh Accounts. Your existing `opencode-go` model login is separate. The details identify the Console workspace; these readings are display-only until the model account can be verified, so they do not drive automatic switching or forecasts. V1/managed accounts have no native Console usage reader. Actual model limit errors retain their existing handling.
+- The plugin does not export OpenCode credentials or read its database. Readings refresh at most once per minute and become stale after five minutes. Disconnecting, changing the workspace/connection metadata, or failing to identify the source clears old windows; it never substitutes zero usage. Console budgets and credit balances are not included.
+- **OpenCode 2:** native CLI connections are discovered through its read-only account list and shown as the CLI login. Add or select those connections with `opencode auth login` / `opencode auth switch`; the plugin does not export them or apply V1 credential overlays to the V2 store.
 
 ### Cursor CLI
 

@@ -1,4 +1,4 @@
-import type { UsageReport, UsageBalance, UsageWindow as PaseoWindow } from "@getpaseo/plugin/server/usage";
+import type { UsageReport, UsageBalance, UsageDetail, UsageWindow as PaseoWindow } from "@getpaseo/plugin/server/usage";
 import { displayUsage } from "../shared/usage-policy";
 import { formatPlan } from "../shared/format";
 import type { Usage } from "../shared/model";
@@ -45,7 +45,14 @@ export function usageReport(account: StoredAccount, usage: Usage | undefined): U
       limit: balance.limitMinor === null ? null : balance.limitMinor / unit,
       remaining: balance.remainingMinor === null ? null : balance.remainingMinor / unit, unit: "usd" });
   }
+  const details: UsageDetail[] = [];
+  if (usage.sourceLabel) {
+    details.push({ id: "usage_source", label: "Source", value: usage.sourceLabel });
+    if (usage.routingEligible === false) details.push({ id: "usage_scope", label: "Scope", value: "Console allowance; Go model account not verified; not used for account switching." });
+  }
+  if ((usage.validUntil !== undefined || usage.routingEligible !== undefined) && (usage.error || usage.cached)) {
+    details.push({ id: "usage_status", label: "Status", value: usage.error ?? "Cached usage; refresh for current data.", tone: "warning" });
+  }
   return { status: "available", ...(plan ? { planLabel: plan } : {}), windows, ...(balances.length ? { balances } : {}),
-    ...((usage.validUntil !== undefined || usage.routingEligible !== undefined) && (usage.error || usage.cached)
-      ? { details: [{ id: "usage_status", label: "Status", value: usage.error ?? "Cached usage; refresh for current data.", tone: "warning" as const }] } : {}) };
+    ...(details.length ? { details } : {}) };
 }

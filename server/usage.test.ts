@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Usage } from "../shared/model";
 import { SwitchGuard } from "./switch-guard";
-import { mergeUsage, retryDelayMs, showLimit } from "./usage";
+import { mergeUsage, resetFromUsage, retryDelayMs, showLimit } from "./usage";
 
 const reading = (patch: Partial<Usage> = {}): Usage => ({
   fetchedAt: "2026-09-23T08:00:00.000Z",
@@ -17,6 +17,10 @@ const reading = (patch: Partial<Usage> = {}): Usage => ({
 });
 
 describe("showLimit", () => {
+  it("does not rewrite a display-only Console window after an unrelated model limit", () => {
+    const consoleUsage=reading({routingEligible:false});
+    expect(showLimit(consoleUsage,"2026-09-23T08:10:00.000Z")).toBe(consoleUsage);
+  });
   it("fills the window that resets when the limit notice says", () => {
     const shown = showLimit(reading(), "2026-09-23T08:10:00.000Z");
     expect(shown.windows.map((window) => window.usedPercent)).toEqual([100, 9, 0]);
@@ -33,7 +37,30 @@ describe("showLimit", () => {
   });
 });
 
+describe("resetFromUsage", () => {
+  it("never derives model cooldowns from display-only Console allowance", () => {
+    const full=reading({windows:[{id:"monthly",label:"Monthly",usedPercent:100,resetsAt:"2026-12-01T00:00:00Z"}]});
+    expect(resetFromUsage(full)).toBe("2026-12-01T00:00:00Z");
+    expect(resetFromUsage({...full,routingEligible:false})).toBeNull();
+    expect(resetFromUsage({...full,cached:true})).toBeNull();
+  });
+});
+
 describe("mergeUsage", () => {
+  it("clears scoped windows when the source changes or can no longer be identified", () => {
+    const previous=reading({sourceId:"console-one",routingEligible:false});
+    for (const sourceId of ["console-two",undefined]) {
+      const next=reading({sourceId,windows:[],routingEligible:false,error:"unavailable"});
+      expect(mergeUsage(previous,next)).toBe(next);
+    }
+  });
+
+  it("marks a retained same-source reading cached and preserves its attribution", () => {
+    const previous=reading({sourceId:"console-one",sourceLabel:"Console One",routingEligible:false});
+    const next=reading({sourceId:"console-one",windows:[],error:"offline"});
+    expect(mergeUsage(previous,next)).toMatchObject({windows:previous.windows,cached:true,sourceLabel:"Console One",routingEligible:false});
+  });
+
   it("keeps the last windows through a failed or rate-limited refresh", () => {
     const merged = mergeUsage(reading(), reading({ fetchedAt: "2026-09-23T08:05:00.000Z", windows: [], error: "offline" }));
     expect(merged.windows).toHaveLength(3);

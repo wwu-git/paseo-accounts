@@ -86,6 +86,9 @@ export function extraLeft(extra: ExtraUsage | null | undefined): boolean {
 }
 
 export const UsageSchema = z.object({
+  /** Non-secret attribution for readings tied to a CLI connection/workspace rather than the model login. */
+  sourceId: z.string().optional(),
+  sourceLabel: z.string().optional(),
   /** Optional limits for conditional providers; absent preserves existing behavior. */
   routingEligible: z.boolean().optional(),
   validUntil: z.string().optional(),

@@ -53,7 +53,7 @@ import { equivalentMode } from "./modes";
 import { homesDir } from "./paths";
 import { Reopener } from "./reopen";
 import { SwitchGuard } from "./switch-guard";
-import { loadReadings, mergeUsage, saveReadings, showLimit } from "./usage";
+import { loadReadings, mergeUsage, resetFromUsage, saveReadings, showLimit } from "./usage";
 import { usageKey, usageReport } from "./usage-source";
 import { chooseAccount, dedicatedElsewhere, folderAccount, isLimited, isUsable, mostAvailable, type PickOptions } from "./routing";
 import {
@@ -626,7 +626,7 @@ export class Service {
         if (shown) this.setUsage(account.id, showLimit(shown, hit.resetsAt));
         // The account was just used, so its token is fresh: ask for the exact reset time.
         await withTimeout(this.refreshUsage(account.id, true), 12_000);
-        const exact = this.resetFromUsage(account.id);
+        const exact = resetFromUsage(this.usage.get(account.id));
         if (exact && Date.parse(exact) > now) {
           resetsAt = exact;
           await this.markLimited(account.id, exact, "window");
@@ -1030,15 +1030,6 @@ export class Service {
    */
   private runningOn(state: StoredState, agentId: string, family: Family): string | undefined {
     return state.sessions[agentId]?.accountId ?? mainAccount(state, family)?.id;
-  }
-
-  /** The reset time of the window that is full, from the freshest live usage reading. */
-  private resetFromUsage(accountId: string): string | null {
-    const usage = this.usage.get(accountId);
-    if (!usage || usage.cached) return null;
-    const full = usage.windows.filter((window) => window.usedPercent >= 99 && window.resetsAt);
-    full.sort((a, b) => Date.parse(b.resetsAt ?? "") - Date.parse(a.resetsAt ?? ""));
-    return full[0]?.resetsAt ?? null;
   }
 
   /** Did this agent's own last turn end on a limit? Then its own failover (with a follow-up) handles it. */
