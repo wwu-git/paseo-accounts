@@ -58,3 +58,38 @@ it("labels expired conditional readings in Paseo Usage without changing legacy r
   });
   expect(report).toMatchObject({status:"available",details:[{label:"Status",value:expect.stringMatching(/stale/i)}]});
 });
+
+it("formats Antigravity multi-pool windows with short labels and informational scope", () => {
+  const report = usageReport(account({ family: "antigravity", kind: "main", home: null, plan: null }), {
+    fetchedAt: new Date().toISOString(),
+    validUntil: new Date(Date.now() + 300_000).toISOString(),
+    routingEligible: false,
+    sourceId: "antigravity-cli",
+    sourceLabel: "Antigravity CLI",
+    windows: [
+      { id: "gemini-weekly", label: "Gemini Models · Weekly", usedPercent: 4.9, resetsAt: "2026-11-26T01:42:22.000Z" },
+      { id: "gemini-5h", label: "Gemini Models · 5-hour", usedPercent: 11.9, resetsAt: "2026-11-19T06:42:22.000Z" },
+      { id: "3p-weekly", label: "Claude and GPT models · Weekly", usedPercent: 0, resetsAt: "2026-11-26T02:29:28.000Z" },
+      { id: "3p-5h", label: "Claude and GPT models · 5-hour", usedPercent: 0, resetsAt: "2026-11-19T07:29:28.000Z" },
+      { id: "gemini-argon-wtu-weekly", label: "Gemini 4 Argon · Weekly", usedPercent: 0, resetsAt: "2026-11-26T02:29:28.000Z" },
+    ],
+    error: null,
+    cached: false,
+    resets: null,
+  });
+  expect(report).toMatchObject({
+    status: "available",
+    details: [
+      { id: "usage_source", label: "Source", value: "Antigravity CLI" },
+      { id: "usage_scope", label: "Scope", value: "Informational model pools; not used for account switching." },
+    ],
+  });
+  if (report.status !== "available") throw new Error("expected available report");
+  expect(report.windows.map((w) => ({ id: w.id, shortLabel: w.shortLabel, summary: w.summary }))).toEqual([
+    { id: "gemini-weekly", shortLabel: "Gem wk", summary: true },
+    { id: "gemini-5h", shortLabel: "Gem 5h", summary: true },
+    { id: "3p-weekly", shortLabel: "3P wk", summary: true },
+    { id: "3p-5h", shortLabel: "3P 5h", summary: true },
+    { id: "gemini-argon-wtu-weekly", shortLabel: "Argon wk", summary: true },
+  ]);
+});

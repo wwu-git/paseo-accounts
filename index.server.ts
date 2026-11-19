@@ -1,6 +1,7 @@
 import type { PluginServerContext, PluginSettingsState } from "@getpaseo/plugin/server";
 import { z } from "zod";
 import { sendAlert } from "./server/alerts";
+import { AntigravityAdapter } from "./server/antigravity";
 import { ClaudeAdapter } from "./server/claude";
 import { CursorAdapter } from "./server/cursor";
 import { CodexAdapter } from "./server/codex";
@@ -41,6 +42,7 @@ export default function contribute(server: PluginServerContext) {
     pi: new PiAdapter(),
     omp: new OmpAdapter(),
     cursor: new CursorAdapter(),
+    antigravity: new AntigravityAdapter(),
   });
 
   const settings = server.registerSettings(preferences);

@@ -9,7 +9,18 @@ export function usageKey(accountId: string): string {
   return accountId.replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 128) || "account";
 }
 
-const SHORT: Record<string, string> = { five_hour: "5h", seven_day: "wk", primary: "5h", secondary: "wk", month: "mo" };
+const SHORT: Record<string, string> = {
+  five_hour: "5h",
+  seven_day: "wk",
+  primary: "5h",
+  secondary: "wk",
+  month: "mo",
+  "gemini-5h": "Gem 5h",
+  "gemini-weekly": "Gem wk",
+  "3p-5h": "3P 5h",
+  "3p-weekly": "3P wk",
+  "gemini-argon-wtu-weekly": "Argon wk",
+};
 
 function tone(used: number): PaseoWindow["tone"] {
   return used >= 100 ? "danger" : used >= 80 ? "warning" : "ok";
@@ -48,7 +59,13 @@ export function usageReport(account: StoredAccount, usage: Usage | undefined): U
   const details: UsageDetail[] = [];
   if (usage.sourceLabel) {
     details.push({ id: "usage_source", label: "Source", value: usage.sourceLabel });
-    if (usage.routingEligible === false) details.push({ id: "usage_scope", label: "Scope", value: "Console allowance; Go model account not verified; not used for account switching." });
+    if (usage.routingEligible === false) {
+      const scope =
+        account.family === "opencode"
+          ? "Console allowance; Go model account not verified; not used for account switching."
+          : "Informational model pools; not used for account switching.";
+      details.push({ id: "usage_scope", label: "Scope", value: scope });
+    }
   }
   if ((usage.validUntil !== undefined || usage.routingEligible !== undefined) && (usage.error || usage.cached)) {
     details.push({ id: "usage_status", label: "Status", value: usage.error ?? "Cached usage; refresh for current data.", tone: "warning" });

@@ -258,7 +258,12 @@ function AccountDetail({
           ))}
           {account.family === "cursor" && windows.length > 0 ? <Text style={text.small}>Informational pools · not used for account switching</Text> : null}
           {account.usage?.sourceLabel ? (
-            <Text style={text.small}>{account.usage.sourceLabel} · Console allowance; Go model account not verified · not used for account switching</Text>
+            <Text style={text.small}>
+              {account.usage.sourceLabel} ·{" "}
+              {account.family === "opencode"
+                ? "Console allowance; Go model account not verified · not used for account switching"
+                : "Informational model pools · not used for account switching"}
+            </Text>
           ) : null}
           {account.usage?.extra ? (
             <Text style={text.small}>Extra usage · {formatExtra(account.usage.extra)}</Text>

@@ -71,7 +71,7 @@ import {
 type PaseoApi = PluginHookContext["paseo"];
 type TurnEnded = PluginLifecycleEvents["agent.turn_ended"];
 
-const PROVIDER_NAME: Record<Family, string> = { claude: "Claude Code", codex: "Codex", copilot: "Copilot CLI", kimi: "Kimi Code", opencode: "OpenCode", pi: "Pi", omp: "Oh My Pi", cursor: "Cursor CLI" };
+const PROVIDER_NAME: Record<Family, string> = { claude: "Claude Code", codex: "Codex", copilot: "Copilot CLI", kimi: "Kimi Code", opencode: "OpenCode", pi: "Pi", omp: "Oh My Pi", cursor: "Cursor CLI", antigravity: "Antigravity CLI" };
 /** How often to read usage: accounts in use, the defaults, and the rest. Adapters space reads further. */
 const USAGE_BUSY_MS = 60_000;
 const USAGE_DEFAULT_MS = 5 * 60_000;
@@ -215,7 +215,9 @@ export class Service {
       input: { accountId: account.id },
     });
     const added = state.accounts.filter((account) => account.kind === "managed" && account.home);
-    if (scope.kind === "global") return added.map(entry);
+    // Paseo has no built-in Antigravity usage source, so expose the signed-in CLI login too.
+    const antigravityMain = state.accounts.find((account) => account.family === "antigravity" && account.kind === "main" && account.signedIn);
+    if (scope.kind === "global") return [...added, ...(antigravityMain ? [antigravityMain] : [])].map(entry);
     const family = this.paseo ? (await this.families.resolve(this.paseo))[scope.provider] : FamilySchema.safeParse(scope.provider).data;
     if (!family || family === "claude" || family === "codex") return [];
     for (const account of added) {
@@ -223,6 +225,7 @@ export class Service {
       const patch = Object.entries(await this.adapters[family].env(account.home)).filter(([, value]) => value !== null);
       if (patch.length > 0 && patch.every(([key, value]) => scope.env[key] === value)) return [entry(account)];
     }
+    if (family === "antigravity" && antigravityMain) return [entry(antigravityMain)];
     return [];
   }
 
