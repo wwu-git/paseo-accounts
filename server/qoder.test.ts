@@ -4,11 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { spawn } from "node:child_process";
+import { startDaemon } from "@qoder-ai/qoder-agent-sdk";
 import { run } from "./process";
-import { parseQoderLoginUrl, parseQoderStatus, QoderAdapter } from "./qoder";
+import { parseQoderLoginUrl, parseQoderStatus, parseQoderUsage, QoderAdapter } from "./qoder";
 
 vi.mock("./process", async (load) => ({ ...(await load<typeof import("./process")>()), run: vi.fn() }));
 vi.mock("node:child_process", async (load) => ({ ...(await load<typeof import("node:child_process")>()), spawn: vi.fn() }));
+vi.mock("@qoder-ai/qoder-agent-sdk", () => ({ startDaemon: vi.fn() }));
 
 const SAMPLE_STATUS = {
   logged_in: true,
@@ -185,5 +187,79 @@ describe("QoderAdapter", () => {
 
     vi.mocked(run).mockResolvedValueOnce({ code: 0, stdout: JSON.stringify(SAMPLE_STATUS), stderr: "", timedOut: false });
     expect(await adapter.identity(null)).toMatchObject({ signedIn: true, email: "alice@example.com", plan: "personal_standard" });
+  });
+
+  it("parses SDK UsageInfo into display-only credit windows and hashes userId", () => {
+    const now = Date.parse("2026-11-19T06:00:00Z");
+    const parsed = parseQoderUsage(
+      {
+        userId: "user-123",
+        userType: "personal_professional",
+        totalUsagePercentage: 1,
+        expiresAt: 1797696000000,
+        userQuota: { total: 2000, used: 0, remaining: 2000, percentage: 0, unit: "credits" },
+        addOnQuota: { total: 2100, used: 43, remaining: 2057, percentage: 2, unit: "credits" },
+        orgResourcePackage: { available: true, used: 50, cap: 500, percentage: 10, unit: "credits" },
+      },
+      now,
+    );
+    expect(parsed).toMatchObject({
+      fetchedAt: "2026-11-19T06:00:00.000Z",
+      validUntil: "2026-11-19T06:05:00.000Z",
+      routingEligible: false,
+      sourceLabel: "Qoder CLI",
+      error: null,
+      windows: [
+        { id: "plan_credits", label: "Plan Credits (0/2000)", usedPercent: 0, resetsAt: "2026-12-19T16:00:00.000Z" },
+        { id: "addon_credits", label: "Add-on Credits (43/2100)", usedPercent: 2, resetsAt: null },
+        { id: "org_package", label: "Org Package (50/500)", usedPercent: 10, resetsAt: null },
+      ],
+    });
+    expect(parsed?.sourceId).toMatch(/^qoder-cli\|[0-9a-f]{24}$/);
+    expect(parsed?.sourceId).not.toContain("user-123");
+    expect(parseQoderUsage(null)).toBeNull();
+    expect(parseQoderUsage({})).toBeNull();
+  });
+
+  it("queries usage via SDK startDaemon with isolated auth and always stops the daemon", async () => {
+    root = mkdtempSync(join(tmpdir(), "paseo-accounts-qoder-usage-"));
+    const home = join(root, "managed");
+    mkdirSync(home, { recursive: true });
+    writeFileSync(join(home, "pat.json"), JSON.stringify({ token: "pat-secret" }), { mode: 0o600 });
+
+    const stop = vi.fn().mockResolvedValue(undefined);
+    const getUsageInfo = vi.fn().mockResolvedValue({
+      userId: "u1",
+      userQuota: { total: 2000, used: 100, remaining: 1900, percentage: 5, unit: "credits" },
+    });
+    vi.mocked(startDaemon).mockReset();
+    vi.mocked(startDaemon).mockResolvedValueOnce({ getUsageInfo, stop } as never);
+
+    const adapter = new QoderAdapter();
+    const reading = await adapter.usage(home);
+    expect(reading).toMatchObject({
+      error: null,
+      routingEligible: false,
+      windows: [{ id: "plan_credits", label: "Plan Credits (100/2000)", usedPercent: 5 }],
+    });
+    expect(vi.mocked(startDaemon)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        launchMode: "process",
+        auth: { type: "accessToken", accessToken: "pat-secret" },
+        env: expect.objectContaining({ QODER_CONFIG_DIR: home, QODER_PERSONAL_ACCESS_TOKEN: "pat-secret" }),
+      }),
+    );
+    expect(stop).toHaveBeenCalledTimes(1);
+
+    const stopOnError = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(startDaemon).mockResolvedValueOnce({
+      getUsageInfo: vi.fn().mockRejectedValue(new Error("secret-error")),
+      stop: stopOnError,
+    } as never);
+    const failed = await adapter.usage(null);
+    expect(failed.windows).toEqual([]);
+    expect(failed.error).toMatch(/Could not read Qoder usage/);
+    expect(failed.error).not.toContain("secret-error");
+    expect(stopOnError).toHaveBeenCalledTimes(1);
   });
 });

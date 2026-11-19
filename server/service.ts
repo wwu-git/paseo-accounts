@@ -215,9 +215,11 @@ export class Service {
       input: { accountId: account.id },
     });
     const added = state.accounts.filter((account) => account.kind === "managed" && account.home);
-    // Paseo has no built-in Antigravity usage source, so expose the signed-in CLI login too.
-    const antigravityMain = state.accounts.find((account) => account.family === "antigravity" && account.kind === "main" && account.signedIn);
-    if (scope.kind === "global") return [...added, ...(antigravityMain ? [antigravityMain] : [])].map(entry);
+    // Paseo has no built-in Antigravity or Qoder usage source, so expose their signed-in CLI logins too.
+    const extraMain = state.accounts.filter(
+      (account) => (account.family === "antigravity" || account.family === "qoder") && account.kind === "main" && account.signedIn,
+    );
+    if (scope.kind === "global") return [...added, ...extraMain].map(entry);
     const family = this.paseo ? (await this.families.resolve(this.paseo))[scope.provider] : FamilySchema.safeParse(scope.provider).data;
     if (!family || family === "claude" || family === "codex") return [];
     for (const account of added) {
@@ -225,7 +227,8 @@ export class Service {
       const patch = Object.entries(await this.adapters[family].env(account.home)).filter(([, value]) => value !== null);
       if (patch.length > 0 && patch.every(([key, value]) => scope.env[key] === value)) return [entry(account)];
     }
-    if (family === "antigravity" && antigravityMain) return [entry(antigravityMain)];
+    const familyMain = extraMain.find((account) => account.family === family);
+    if (familyMain) return [entry(familyMain)];
     return [];
   }
 

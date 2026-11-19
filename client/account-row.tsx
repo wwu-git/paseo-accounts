@@ -262,7 +262,9 @@ function AccountDetail({
               {account.usage.sourceLabel} ·{" "}
               {account.family === "opencode"
                 ? "Console allowance; Go model account not verified · not used for account switching"
-                : "Informational model pools · not used for account switching"}
+                : account.family === "qoder"
+                  ? "Informational credit pools · not used for account switching"
+                  : "Informational model pools · not used for account switching"}
             </Text>
           ) : null}
           {account.usage?.extra ? (

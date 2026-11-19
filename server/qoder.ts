@@ -1,7 +1,11 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
+import { accessSync, constants } from "node:fs";
 import { readFile, rm } from "node:fs/promises";
-import { delimiter, join } from "node:path";
-import type { LoginMethod } from "../shared/model";
+import { homedir } from "node:os";
+import { basename, delimiter, isAbsolute, join } from "node:path";
+import { startDaemon, type UsageInfo } from "@qoder-ai/qoder-agent-sdk";
+import type { LoginMethod, Usage, UsageWindow } from "../shared/model";
 import {
   ProgressEmitter,
   spawnEnv,
@@ -19,6 +23,8 @@ import { writeJsonAtomic } from "./json-file";
 import { run, stripAnsi } from "./process";
 
 const PAT_PAGE = "https://qoder.com/account/integrations";
+const FRESH_MS = 5 * 60_000;
+const SOURCE_LABEL = "Qoder CLI";
 const TOKEN_KEYS = ["QODER_PERSONAL_ACCESS_TOKEN", "QODER_PAT", "QODER_ACCESS_TOKEN"] as const;
 const unsigned = (): Identity => ({ signedIn: false, email: null, plan: null, organization: null, identity: null });
 
@@ -68,6 +74,125 @@ async function qoderCliCommand(): Promise<{ command: string; prefix: string[] }>
   return { command, prefix: prefix.filter((arg) => arg !== "--acp") };
 }
 
+function isExecutable(filePath: string): boolean {
+  try {
+    accessSync(filePath, process.platform === "win32" ? constants.F_OK : constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Resolves an executable path to `qodercli` for the SDK's `process` launch mode. */
+async function resolveQoderCliBinary(): Promise<string | null> {
+  const { command, prefix } = await qoderCliCommand();
+  const base = basename(command).toLowerCase();
+  if (prefix.length === 0 && !["npx", "npm", "pnpm", "bunx", "npx.cmd", "npm.cmd"].includes(base)) {
+    if (isAbsolute(command)) return isExecutable(command) ? command : null;
+  }
+  const binary = process.platform === "win32" ? "qodercli.exe" : "qodercli";
+  const dirs = [
+    ...(process.env.PATH ?? "").split(delimiter).filter(Boolean),
+    join(homedir(), ".local", "bin"),
+  ];
+  for (const dir of dirs) {
+    const candidate = join(dir, binary);
+    if (isExecutable(candidate)) return candidate;
+  }
+  return null;
+}
+
+function finiteNonNegative(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function bucketPercent(bucket: { percentage?: unknown; used?: unknown; total?: unknown; cap?: unknown } | undefined): number | null {
+  if (!bucket) return null;
+  const pct = finiteNonNegative(bucket.percentage);
+  if (pct !== null) return Math.round(pct * 10) / 10;
+  const used = finiteNonNegative(bucket.used);
+  const total = finiteNonNegative(bucket.total ?? bucket.cap);
+  if (used !== null && total !== null && total > 0) return Math.round((used / total) * 1000) / 10;
+  return null;
+}
+
+function bucketSuffix(used: unknown, total: unknown): string {
+  const u = finiteNonNegative(used);
+  const t = finiteNonNegative(total);
+  return u !== null && t !== null && t > 0 ? ` (${Math.round(u)}/${Math.round(t)})` : "";
+}
+
+/** Parses `@qoder-ai/qoder-agent-sdk` `UsageInfo` into display-only credit windows. */
+export function parseQoderUsage(raw: UsageInfo | null | undefined, now = Date.now()): Usage | null {
+  if (!raw || typeof raw !== "object") return null;
+  let resetsAt: string | null = null;
+  if (typeof raw.expiresAt === "number" && Number.isFinite(raw.expiresAt) && raw.expiresAt > 0) {
+    const ms = raw.expiresAt < 1e12 ? raw.expiresAt * 1000 : raw.expiresAt;
+    const iso = new Date(ms).toISOString();
+    if (Number.isFinite(Date.parse(iso))) resetsAt = iso;
+  }
+
+  const windows: UsageWindow[] = [];
+  const planPct = bucketPercent(raw.userQuota);
+  if (planPct !== null) {
+    windows.push({
+      id: "plan_credits",
+      label: `Plan Credits${bucketSuffix(raw.userQuota?.used, raw.userQuota?.total)}`,
+      usedPercent: planPct,
+      resetsAt,
+    });
+  }
+  const addOnPct = bucketPercent(raw.addOnQuota);
+  if (addOnPct !== null && (finiteNonNegative(raw.addOnQuota?.total) ?? 1) > 0) {
+    windows.push({
+      id: "addon_credits",
+      label: `Add-on Credits${bucketSuffix(raw.addOnQuota?.used, raw.addOnQuota?.total)}`,
+      usedPercent: addOnPct,
+      resetsAt: null,
+    });
+  }
+  if (raw.orgResourcePackage?.available) {
+    const orgPct = bucketPercent(raw.orgResourcePackage);
+    if (orgPct !== null) {
+      windows.push({
+        id: "org_package",
+        label: `Org Package${bucketSuffix(raw.orgResourcePackage.used, raw.orgResourcePackage.cap)}`,
+        usedPercent: orgPct,
+        resetsAt: null,
+      });
+    }
+  }
+  if (windows.length === 0) {
+    const totalPct = finiteNonNegative(raw.totalUsagePercentage);
+    if (totalPct !== null) {
+      windows.push({
+        id: "qoder_usage",
+        label: "Total Credits",
+        usedPercent: Math.round(totalPct * 10) / 10,
+        resetsAt,
+      });
+    }
+  }
+  if (windows.length === 0) return null;
+
+  const sourceId =
+    typeof raw.userId === "string" && raw.userId.trim()
+      ? `qoder-cli|${createHash("sha256").update(raw.userId.trim()).digest("hex").slice(0, 24)}`
+      : "qoder-cli";
+
+  return {
+    fetchedAt: new Date(now).toISOString(),
+    validUntil: new Date(now + FRESH_MS).toISOString(),
+    routingEligible: false,
+    sourceId,
+    sourceLabel: SOURCE_LABEL,
+    windows,
+    error: null,
+    cached: false,
+    resets: null,
+  };
+}
+
 /**
  * Qoder CLI (`qodercli`) multi-account adapter.
  * Managed accounts get isolated `QODER_CONFIG_DIR` homes with shared settings/projects, supporting
@@ -112,14 +237,42 @@ export class QoderAdapter implements FamilyAdapter {
     }
   }
 
-  async usage(): Promise<UsageRead> {
-    return {
-      fetchedAt: new Date().toISOString(),
+  async usage(home: string | null): Promise<UsageRead> {
+    const fetchedAt = new Date().toISOString();
+    const empty = (error: string): UsageRead => ({
+      fetchedAt,
       windows: [],
-      error: "Qoder usage isn't shown here yet.",
+      error,
       cached: false,
       resets: null,
-    };
+      routingEligible: false,
+      sourceLabel: SOURCE_LABEL,
+    });
+    const cliPath = await resolveQoderCliBinary();
+    if (!cliPath) return empty("Qoder CLI binary was not found on PATH.");
+
+    let daemon: Awaited<ReturnType<typeof startDaemon>> | null = null;
+    try {
+      const patch = await this.env(home);
+      const env = spawnEnv(patch);
+      const pat = home ? await patAt(home) : null;
+      const auth = pat ? ({ type: "accessToken", accessToken: pat } as const) : ({ type: "qodercli" } as const);
+      daemon = await startDaemon({
+        launchMode: "process",
+        pathToQoderCLIExecutable: cliPath,
+        auth,
+        env,
+        initializeTimeoutMs: 15_000,
+      });
+      const info = await daemon.getUsageInfo();
+      const parsed = parseQoderUsage(info);
+      if (!parsed) return empty("Qoder returned no account quota data.");
+      return parsed;
+    } catch {
+      return empty("Could not read Qoder usage. Check your Qoder login and refresh again.");
+    } finally {
+      await daemon?.stop().catch(() => undefined);
+    }
   }
 
   async redeemReset(): Promise<RedeemReply> {

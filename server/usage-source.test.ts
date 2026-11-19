@@ -93,3 +93,32 @@ it("formats Antigravity multi-pool windows with short labels and informational s
     { id: "gemini-argon-wtu-weekly", shortLabel: "Argon wk", summary: true },
   ]);
 });
+
+it("formats Qoder credit pools with short labels and informational scope", () => {
+  const report = usageReport(account({ family: "qoder", kind: "main", home: null, plan: "personal_professional" }), {
+    fetchedAt: new Date().toISOString(),
+    validUntil: new Date(Date.now() + 300_000).toISOString(),
+    routingEligible: false,
+    sourceId: "qoder-cli|abcdef",
+    sourceLabel: "Qoder CLI",
+    windows: [
+      { id: "plan_credits", label: "Plan Credits (0/2000)", usedPercent: 0, resetsAt: "2026-12-19T16:00:00.000Z" },
+      { id: "addon_credits", label: "Add-on Credits (43/2100)", usedPercent: 2, resetsAt: null },
+    ],
+    error: null,
+    cached: false,
+    resets: null,
+  });
+  expect(report).toMatchObject({
+    status: "available",
+    details: [
+      { id: "usage_source", label: "Source", value: "Qoder CLI" },
+      { id: "usage_scope", label: "Scope", value: "Informational credit pools; not used for account switching." },
+    ],
+  });
+  if (report.status !== "available") throw new Error("expected available report");
+  expect(report.windows.map((w) => ({ id: w.id, shortLabel: w.shortLabel, summary: w.summary }))).toEqual([
+    { id: "plan_credits", shortLabel: "Plan", summary: true },
+    { id: "addon_credits", shortLabel: "Add-on", summary: true },
+  ]);
+});

@@ -20,6 +20,10 @@ const SHORT: Record<string, string> = {
   "3p-5h": "3P 5h",
   "3p-weekly": "3P wk",
   "gemini-argon-wtu-weekly": "Argon wk",
+  plan_credits: "Plan",
+  addon_credits: "Add-on",
+  org_package: "Org",
+  qoder_usage: "Total",
 };
 
 function tone(used: number): PaseoWindow["tone"] {
@@ -63,7 +67,9 @@ export function usageReport(account: StoredAccount, usage: Usage | undefined): U
       const scope =
         account.family === "opencode"
           ? "Console allowance; Go model account not verified; not used for account switching."
-          : "Informational model pools; not used for account switching.";
+          : account.family === "qoder"
+            ? "Informational credit pools; not used for account switching."
+            : "Informational model pools; not used for account switching.";
       details.push({ id: "usage_scope", label: "Scope", value: scope });
     }
   }
