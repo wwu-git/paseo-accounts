@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /** The subscription families this plugin manages. Custom provider profiles map onto one of them. */
-export const FamilySchema = z.enum(["claude", "codex", "copilot", "kimi", "opencode", "pi", "omp", "cursor", "antigravity"]);
+export const FamilySchema = z.enum(["claude", "codex", "copilot", "kimi", "opencode", "pi", "omp", "cursor", "antigravity", "qoder"]);
 export type Family = z.infer<typeof FamilySchema>;
 export const FAMILIES: readonly Family[] = FamilySchema.options;
 
@@ -15,6 +15,7 @@ export const FAMILY_LABEL: Record<Family, string> = {
   omp: "Oh My Pi",
   cursor: "Cursor",
   antigravity: "Antigravity",
+  qoder: "Qoder",
 };
 
 /** Section headings on the Accounts screen. */
@@ -28,13 +29,14 @@ export const FAMILY_HEADING: Record<Family, string> = {
   omp: "Oh My Pi",
   cursor: "Cursor",
   antigravity: "Google Antigravity",
+  qoder: "Qoder",
 };
 
 /**
  * Providers a stopped chat can carry on with when every account of its own is out, most preferred
  * first. The first one here that is installed and has a usable account takes over in a new agent.
  */
-export const FALLBACK_ORDER: readonly Family[] = ["claude", "codex", "kimi", "opencode", "copilot", "pi", "omp", "cursor", "antigravity"];
+export const FALLBACK_ORDER: readonly Family[] = ["claude", "codex", "kimi", "opencode", "copilot", "pi", "omp", "cursor", "antigravity", "qoder"];
 
 /** The providers a `from` agent can carry on with, most preferred first. */
 export function fallbackFamilies(from: Family): Family[] {

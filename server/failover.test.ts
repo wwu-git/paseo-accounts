@@ -109,7 +109,7 @@ async function setUp(state: Partial<StoredState>, hit: () => LimitHit, options: 
   const families = { resolve: async () => ({ claude: "claude" as const }) };
   const claude = { ...claudeAdapter(hit), ...(options.detectLimit ? { detectLimit: options.detectLimit } : {}) };
   const service = new Service(
-    { claude, codex: claudeAdapter(hit), kimi: claudeAdapter(hit), opencode: claudeAdapter(hit), pi: claudeAdapter(hit), copilot: claudeAdapter(hit), cursor: claudeAdapter(hit), omp: claudeAdapter(hit), antigravity: claudeAdapter(hit) },
+    { claude, codex: claudeAdapter(hit), kimi: claudeAdapter(hit), opencode: claudeAdapter(hit), pi: claudeAdapter(hit), copilot: claudeAdapter(hit), cursor: claudeAdapter(hit), omp: claudeAdapter(hit), antigravity: claudeAdapter(hit), qoder: claudeAdapter(hit) },
     store,
     families as unknown as FamilyResolver,
     reopener as unknown as Reopener,
@@ -329,6 +329,7 @@ describe("forking to the other provider", () => {
         cursor: claudeAdapter(() => ({ kind: "window", resetsAt: null, message: "" })),
         omp: claudeAdapter(() => ({ kind: "window", resetsAt: null, message: "" })),
         antigravity: claudeAdapter(() => ({ kind: "window", resetsAt: null, message: "" })),
+        qoder: claudeAdapter(() => ({ kind: "window", resetsAt: null, message: "" })),
       },
       store,
       { resolve: async () => ({ claude: "claude" as const, codex: "codex" as const }) } as unknown as FamilyResolver,
@@ -630,6 +631,7 @@ describe("forking further down the provider order", () => {
         omp: adapter("omp", room),
         cursor: adapter("cursor", room),
         antigravity: adapter("antigravity", room),
+        qoder: adapter("qoder", room),
       },
       store,
       { resolve: async () => ({ claude: "claude", codex: "codex", kimi: "kimi", pi: "pi" }) } as unknown as FamilyResolver,
@@ -780,7 +782,7 @@ describe("changing the default account", () => {
         opencode: claudeAdapter(hit),
         pi: claudeAdapter(hit),
         copilot: claudeAdapter(hit),
-        cursor: claudeAdapter(hit), omp: claudeAdapter(hit), antigravity: claudeAdapter(hit),
+        cursor: claudeAdapter(hit), omp: claudeAdapter(hit), antigravity: claudeAdapter(hit), qoder: claudeAdapter(hit),
       },
       store,
       { resolve: async () => ({ claude: "claude" as const, codex: "codex" as const }) } as unknown as FamilyResolver,

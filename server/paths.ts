@@ -58,3 +58,9 @@ export function mainCodexHome(): string {
   const configured = process.env.CODEX_HOME?.trim();
   return configured ? resolve(configured) : join(homedir(), ".codex");
 }
+
+/** Qoder CLI's user-level config and auth folder (`~/.qoder` unless `QODER_CONFIG_DIR` is set). */
+export function mainQoderDir(): string {
+  const configured = process.env.QODER_CONFIG_DIR?.trim();
+  return configured ? resolve(configured) : join(homedir(), ".qoder");
+}

@@ -33,7 +33,14 @@ export async function providerCommand(provider: Family): Promise<Command> {
     cache = { at: Date.now(), value };
   }
   return cache.value[provider] ?? {
-    command: provider === "cursor" ? "agent" : provider === "antigravity" ? "agy" : provider,
+    command:
+      provider === "cursor"
+        ? "agent"
+        : provider === "antigravity"
+          ? "agy"
+          : provider === "qoder"
+            ? "qodercli"
+            : provider,
     prefix: [],
   };
 }

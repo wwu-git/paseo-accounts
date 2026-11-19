@@ -250,7 +250,9 @@ function SignInSteps({
   );
 
   const service = FAMILY_LABEL[family];
-  const canSwitch = browserUsable && (family === "codex" || (Boolean(login.url) && Boolean(login.codeUrl)));
+  const canSwitch =
+    (family === "qoder" && Boolean(login.url || login.codeUrl)) ||
+    (browserUsable && (family === "codex" || (Boolean(login.url) && Boolean(login.codeUrl))));
   return (
     <View style={{ gap: 16 }}>
       <Step theme={theme} number={1} title={`Open the ${service} sign-in page`}>
@@ -311,13 +313,25 @@ function SignInSteps({
         <Step
           theme={theme}
           number={2}
-          title={(family === "opencode" || family === "cursor") ? "Create an API key there and paste it here" : "Paste the code shown after you sign in"}
+          title={
+            family === "qoder"
+              ? "Create a Personal Access Token there and paste it here"
+              : family === "opencode" || family === "cursor"
+                ? "Create an API key there and paste it here"
+                : "Paste the code shown after you sign in"
+          }
         >
           <TextInput
             value={code}
             onChangeText={setCode}
-            secureTextEntry={family === "cursor" || family === "opencode"}
-            placeholder={family === "cursor" || family === "opencode" ? "Paste API key" : "Paste code"}
+            secureTextEntry={family === "cursor" || family === "opencode" || family === "qoder"}
+            placeholder={
+              family === "qoder"
+                ? "Paste Personal Access Token"
+                : family === "cursor" || family === "opencode"
+                  ? "Paste API key"
+                  : "Paste code"
+            }
             placeholderTextColor={theme.colors.foregroundMuted}
             autoCapitalize="none"
             autoCorrect={false}

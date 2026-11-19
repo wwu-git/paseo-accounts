@@ -1,7 +1,7 @@
 import { copyFile, lstat, mkdir, readFile, readdir, readlink, realpath, rename, rm, rmdir, stat, symlink, unlink, writeFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { join, sep } from "node:path";
-import { homesDir, mainClaudeDir, mainClaudeGlobalConfig, mainCodexHome, mainCopilotHome, mainKimiHome, mainPiDir } from "./paths";
+import { homesDir, mainClaudeDir, mainClaudeGlobalConfig, mainCodexHome, mainCopilotHome, mainKimiHome, mainPiDir, mainQoderDir } from "./paths";
 
 /**
  * A managed account home is a real directory holding that account's own credentials and account
@@ -404,6 +404,37 @@ export async function preparePiHome(home: string, force = false): Promise<void> 
   const last = lastSync.get(home);
   if (!force && last && Date.now() - last < SYNC_TTL_MS) return;
   await syncOverlay(home, { main: mainPiDir(), shareDirs: ["sessions"], isPrivate: piPrivate });
+  lastSync.set(home, Date.now());
+}
+
+// --------------------------------------------------------------------------- Qoder
+
+/** Per-account auth, caches and runtime state in `~/.qoder`; settings, plugins and projects stay shared. */
+const QODER_PRIVATE = new Set([
+  ".auth",
+  ".cache",
+  ".last-cleanup",
+  ".models",
+  "cache",
+  "installation_id",
+  "logs",
+  "pat.json",
+  "session-env",
+  "shell-snapshots",
+  "state.json",
+  "tasks",
+  "tmp",
+  "umid-cache.json",
+]);
+
+function qoderPrivate(name: string): boolean {
+  return QODER_PRIVATE.has(name) || isTemporary(name) || name.endsWith(".lock");
+}
+
+export async function prepareQoderHome(home: string, force = false): Promise<void> {
+  const last = lastSync.get(home);
+  if (!force && last && Date.now() - last < SYNC_TTL_MS) return;
+  await syncOverlay(home, { main: mainQoderDir(), shareDirs: ["projects"], isPrivate: qoderPrivate });
   lastSync.set(home, Date.now());
 }
 

@@ -10,6 +10,7 @@ import { KimiAdapter } from "./server/kimi";
 import { OmpAdapter } from "./server/omp";
 import { OpenCodeAdapter } from "./server/opencode";
 import { PiAdapter } from "./server/pi";
+import { QoderAdapter } from "./server/qoder";
 import { Service, describe } from "./server/service";
 import { preferences } from "./shared/preferences";
 import {
@@ -43,6 +44,7 @@ export default function contribute(server: PluginServerContext) {
     omp: new OmpAdapter(),
     cursor: new CursorAdapter(),
     antigravity: new AntigravityAdapter(),
+    qoder: new QoderAdapter(),
   });
 
   const settings = server.registerSettings(preferences);

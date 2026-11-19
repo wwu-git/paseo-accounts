@@ -71,7 +71,7 @@ import {
 type PaseoApi = PluginHookContext["paseo"];
 type TurnEnded = PluginLifecycleEvents["agent.turn_ended"];
 
-const PROVIDER_NAME: Record<Family, string> = { claude: "Claude Code", codex: "Codex", copilot: "Copilot CLI", kimi: "Kimi Code", opencode: "OpenCode", pi: "Pi", omp: "Oh My Pi", cursor: "Cursor CLI", antigravity: "Antigravity CLI" };
+const PROVIDER_NAME: Record<Family, string> = { claude: "Claude Code", codex: "Codex", copilot: "Copilot CLI", kimi: "Kimi Code", opencode: "OpenCode", pi: "Pi", omp: "Oh My Pi", cursor: "Cursor CLI", antigravity: "Antigravity CLI", qoder: "Qoder CLI" };
 /** How often to read usage: accounts in use, the defaults, and the rest. Adapters space reads further. */
 const USAGE_BUSY_MS = 60_000;
 const USAGE_DEFAULT_MS = 5 * 60_000;
