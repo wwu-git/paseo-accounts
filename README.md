@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/wwu-git/paseo-accounts/actions/workflows/ci.yml/badge.svg)](https://github.com/wwu-git/paseo-accounts/actions/workflows/ci.yml)
 
-Use several Claude, ChatGPT (Codex), GitHub Copilot, Kimi Code, OpenCode Go, Pi, Oh My Pi, Cursor and Google Antigravity subscriptions side by side in [Paseo](https://paseo.sh), without logging in and out of the CLI.
+Use several Claude, ChatGPT (Codex), GitHub Copilot, Kimi Code, OpenCode Go, Pi, Oh My Pi, Cursor, Google Antigravity and Qoder subscriptions side by side in [Paseo](https://paseo.sh), without logging in and out of the CLI.
 
 ![Paseo Accounts](images/accounts-dark.png)
 
@@ -13,15 +13,15 @@ Use several Claude, ChatGPT (Codex), GitHub Copilot, Kimi Code, OpenCode Go, Pi,
 - **Automatic failover.** When an account hits its 5-hour or weekly limit, the agent moves to the account with the most room left and carries on. New agents skip exhausted accounts.
 - **Ultra plans.** Claude Max 20x accounts show as Ultra. Verified Ultra accounts have no 5-hour limit in Claude Code, so they only show weekly limits.
 - **Live usage.** Each account shows its own 5-hour and weekly usage and when they reset. Accounts in use refresh about every minute and after each turn, and a limit shows up the moment it hits.
-- **In Paseo's Usage view.** On Paseo 0.12 and later, every added account—plus your signed-in Google Antigravity CLI login—shows up in Paseo's own Usage view and `paseo usage`, next to Paseo's built-in sources.
+- **In Paseo's Usage view.** On Paseo 0.12 and later, every added account—plus your signed-in Google Antigravity and Qoder CLI logins—shows up in Paseo's own Usage view and `paseo usage`, next to Paseo's built-in sources.
 - **Start an agent on a named account.** `paseo run --env PASEO_ACCOUNT=Work "…"` from scripts and schedules. The name matches any case; use the account id if two share a name.
 - **Claude extra usage.** An account with paid extra usage shows its budget left. Optionally, agents use it once every other account is full, instead of stopping.
 - **Banked resets.** If a provider has banked limit resets on an account, you can use one from the account card or the agent's account button.
 - **Signed-out accounts stand out.** On Paseo 0.12 and later, the sidebar's **Accounts** item shows how many accounts need signing in again.
 - **Set an account aside.** Disable an account for a while and its agents move to your other accounts, then come back when you enable it again.
 - **Several hosts.** Each Paseo host keeps its own accounts, and the Accounts screen says which host you're looking at.
-- **Fork to another provider (optional).** When every account of a provider is out, a stopped chat can carry on in a new agent on the next provider with a free account (Claude, ChatGPT, Kimi Code, OpenCode, Copilot, Pi, Oh My Pi, Cursor, Antigravity), then any other provider Paseo has available on the host.
-- **Copilot, Kimi Code, OpenCode Go, Pi, Oh My Pi, Cursor and Google Antigravity.** Add accounts for supported providers installed on the host from **Add account** at the top. A provider only gets a section (and a line in the summary) once it runs agents, has a ready CLI login, or has an account you added. Kimi accounts sign in with `kimi login`, show 5-hour and monthly usage, and switch on limits like Claude; Google Antigravity shows read-only CLI subscription pools directly from `agy`.
+- **Fork to another provider (optional).** When every account of a provider is out, a stopped chat can carry on in a new agent on the next provider with a free account (Claude, ChatGPT, Kimi Code, OpenCode, Copilot, Pi, Oh My Pi, Cursor, Antigravity, Qoder), then any other provider Paseo has available on the host.
+- **Copilot, Kimi Code, OpenCode Go, Pi, Oh My Pi, Cursor, Google Antigravity and Qoder.** Add accounts for supported providers installed on the host from **Add account** at the top. A provider only gets a section (and a line in the summary) once it runs agents, has a ready CLI login, or has an account you added. Kimi accounts sign in with `kimi login`, show 5-hour and monthly usage, and switch on limits like Claude; Google Antigravity shows read-only CLI subscription pools directly from `agy`; Qoder supports isolated multi-account sign-in (browser device flow or Personal Access Token) and Credits usage via `@qoder-ai/qoder-agent-sdk`.
 - **Project folders.** Dedicate an account to one or more folders: agents working there use it, and no other agent moves onto it.
 - **Everything else stays the same.** Every account shares your settings, skills, plugins, MCP servers, `CLAUDE.md`/`AGENTS.md` and conversation history.
 
@@ -132,6 +132,17 @@ Oh My Pi keeps several accounts per provider itself and switches between them wh
 - Model pools are independent and display-only (`routingEligible: false`): they never mark the whole account limited, drive forecasts, or trigger automatic switching. Readings refresh at most once per minute and are marked stale after five minutes; error messages never expose raw CLI output.
 - Multiple managed Antigravity accounts, sign-in/sign-out flows, and profiles that bring their own credentials (`GEMINI_API_KEY`, `GOOGLE_API_KEY`, `GOOGLE_APPLICATION_CREDENTIALS`) are not managed here. Sign in or out in the `agy` CLI directly.
 
+### Qoder
+
+- Requires `qodercli` installed on the daemon host (tested locally with Paseo 0.16.1 and `qodercli` 1.1.92 on Linux).
+- Your existing `qodercli` login is discovered automatically via `qodercli status -o json` (showing email and plan).
+- **Add account → Qoder** supports both:
+  - **Browser device flow** (`qodercli login` in an isolated `QODER_CONFIG_DIR`): open the printed `qoder.com/device/...` link on any device to authorize.
+  - **Personal Access Token** (`Use a code instead`): verified live via `qodercli status -o json` before saving to `<home>/pat.json` (mode `0600`).
+- Each added account gets its own `QODER_CONFIG_DIR` with isolated `.auth/`, caches, and `pat.json`, while sharing `settings.json`, `projects/`, `plugins/`, and `skills/` with `~/.qoder`. Managed browser accounts clear inherited `QODER_PERSONAL_ACCESS_TOKEN` so a daemon-wide token cannot override them.
+- **Credits usage:** queries Plan Credits, Add-on Credits, and Org Resource Packages through the official `@qoder-ai/qoder-agent-sdk` (`startDaemon` in `process` mode using the local `qodercli`, then `getUsageInfo()` and `stop()`), with zero model token consumption and no raw credential reading. Readings appear in **Accounts** and `paseo usage`, refresh at most once per minute, become stale after five minutes, and are display-only (`routingEligible: false`).
+- Profiles bringing their own credentials or custom endpoints (`QODER_PERSONAL_ACCESS_TOKEN`, `QODER_PAT`, `QODER_ACCESS_TOKEN`, `QODER_CONFIG_DIR`, `QODER_API_BASE_URL`, `QODER_OPENAPI_BASE_URL`) are not managed. Cross-account session restore and automatic limit failover are not enabled yet.
+
 ### Before the limit, restart check and alerts
 
 - **Switch early** (Settings → Before the limit, a number from 50 to 99, default 92% used; 100 turns it off): when an agent's turn ends on an account that full, it moves to the account with the most room before its next turn, so it doesn't stop halfway through a task. It only moves to an account that's below the line itself, never onto another project's dedicated account, and leaves agents you put on an account yourself.
@@ -164,7 +175,7 @@ Some plans come with banked limit resets: ChatGPT's reset credits, and Claude Co
 paseo-accounts tries these in order, and a timeline note says which one happened:
 
 1. **Use a banked reset**, if you turned on **Use banked resets when every account is out**.
-2. **Fork the chat to another provider**, if you turned on **When every account is out, fork the chat to another provider** (off by default). A stopped chat continues on the next provider with a free account, in the order Claude, ChatGPT, Kimi Code, OpenCode, Copilot, Pi, Oh My Pi, Cursor, Antigravity (skipping the chat's own provider), then any other provider Paseo lists as available — custom providers included, with no account binding:
+2. **Fork the chat to another provider**, if you turned on **When every account is out, fork the chat to another provider** (off by default). A stopped chat continues on the next provider with a free account, in the order Claude, ChatGPT, Kimi Code, OpenCode, Copilot, Pi, Oh My Pi, Cursor, Antigravity, Qoder (skipping the chat's own provider), then any other provider Paseo lists as available — custom providers included, with no account binding:
    - The new agent opens in the same workspace with the conversation so far and goes straight back to work. It uses that provider's default model and its account with the most room left.
    - Where the provider has permission modes, the fork gets the mode closest to the original's without allowing more. A provider with nothing as careful as the original is skipped, and one with no modes at all (like Pi) runs with its own defaults. paseo-accounts never gives a fork more freedom than you gave the original.
    - The original agent stays as it was, and prompting it again while its provider is still out points to the same fork rather than starting another.

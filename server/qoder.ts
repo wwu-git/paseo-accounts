@@ -1,10 +1,11 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { accessSync, constants } from "node:fs";
+import { accessSync, constants, existsSync } from "node:fs";
 import { readFile, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, delimiter, isAbsolute, join } from "node:path";
-import { startDaemon, type UsageInfo } from "@qoder-ai/qoder-agent-sdk";
+import { pathToFileURL } from "node:url";
+import type { startDaemon as StartDaemonFn, UsageInfo } from "@qoder-ai/qoder-agent-sdk";
 import type { LoginMethod, Usage, UsageWindow } from "../shared/model";
 import {
   ProgressEmitter,
@@ -19,7 +20,8 @@ import {
 } from "./adapter";
 import { providerCommand, quietBrowserDir } from "./binaries";
 import { prepareQoderHome } from "./homes";
-import { writeJsonAtomic } from "./json-file";
+import { readJson, writeJsonAtomic } from "./json-file";
+import { paseoHome } from "./paths";
 import { run, stripAnsi } from "./process";
 
 const PAT_PAGE = "https://qoder.com/account/integrations";
@@ -194,6 +196,49 @@ export function parseQoderUsage(raw: UsageInfo | null | undefined, now = Date.no
 }
 
 /**
+ * Loads `@qoder-ai/qoder-agent-sdk` via native ESM import at runtime so Paseo's CJS plugin bundler
+ * does not inline the SDK (whose top-level code calls `fileURLToPath(import.meta.url)`).
+ */
+const nativeImport = new Function("specifier", "return import(specifier)") as (
+  specifier: string,
+) => Promise<{ startDaemon: typeof StartDaemonFn }>;
+
+async function loadQoderSdk(): Promise<{ startDaemon: typeof StartDaemonFn }> {
+  const pkg = "@qoder-ai/qoder-agent-sdk";
+  const rel = join("node_modules", "@qoder-ai", "qoder-agent-sdk", "dist", "index.js");
+  const candidates: string[] = [pkg];
+  const dirs = new Set<string>([process.cwd()]);
+  if (typeof __dirname === "string" && __dirname) {
+    dirs.add(__dirname);
+    dirs.add(join(__dirname, ".."));
+  }
+  try {
+    const cfg = (await readJson(join(paseoHome(), "config.json"))) as
+      | { plugins?: Record<string, { path?: unknown; source?: unknown; directory?: unknown }> }
+      | undefined;
+    const entry = cfg?.plugins?.["paseo-accounts"];
+    for (const value of [entry?.path, entry?.directory, entry?.source]) {
+      if (typeof value === "string" && isAbsolute(value)) dirs.add(value);
+    }
+  } catch {
+    // Ignore unreadable config.
+  }
+  for (const dir of dirs) {
+    const file = join(dir, rel);
+    if (existsSync(file)) candidates.push(pathToFileURL(file).href);
+  }
+  let lastError: unknown;
+  for (const specifier of candidates) {
+    try {
+      return await nativeImport(specifier);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError ?? new Error("Could not load @qoder-ai/qoder-agent-sdk");
+}
+
+/**
  * Qoder CLI (`qodercli`) multi-account adapter.
  * Managed accounts get isolated `QODER_CONFIG_DIR` homes with shared settings/projects, supporting
  * both `qodercli login` (device browser flow) and Personal Access Tokens validated via `status -o json`.
@@ -202,6 +247,8 @@ export class QoderAdapter implements FamilyAdapter {
   readonly family = "qoder" as const;
   readonly portable = false;
   readonly usageSpacingMs = 60_000;
+
+  constructor(private readonly loadSdk: () => Promise<{ startDaemon: typeof StartDaemonFn }> = loadQoderSdk) {}
 
   async available(): Promise<{ ok: boolean; detail: string | null }> {
     const { command, prefix } = await qoderCliCommand();
@@ -251,8 +298,9 @@ export class QoderAdapter implements FamilyAdapter {
     const cliPath = await resolveQoderCliBinary();
     if (!cliPath) return empty("Qoder CLI binary was not found on PATH.");
 
-    let daemon: Awaited<ReturnType<typeof startDaemon>> | null = null;
+    let daemon: Awaited<ReturnType<typeof StartDaemonFn>> | null = null;
     try {
+      const { startDaemon } = await this.loadSdk();
       const patch = await this.env(home);
       const env = spawnEnv(patch);
       const pat = home ? await patAt(home) : null;

@@ -4,13 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { spawn } from "node:child_process";
-import { startDaemon } from "@qoder-ai/qoder-agent-sdk";
 import { run } from "./process";
 import { parseQoderLoginUrl, parseQoderStatus, parseQoderUsage, QoderAdapter } from "./qoder";
 
 vi.mock("./process", async (load) => ({ ...(await load<typeof import("./process")>()), run: vi.fn() }));
 vi.mock("node:child_process", async (load) => ({ ...(await load<typeof import("node:child_process")>()), spawn: vi.fn() }));
-vi.mock("@qoder-ai/qoder-agent-sdk", () => ({ startDaemon: vi.fn() }));
 
 const SAMPLE_STATUS = {
   logged_in: true,
@@ -232,17 +230,16 @@ describe("QoderAdapter", () => {
       userId: "u1",
       userQuota: { total: 2000, used: 100, remaining: 1900, percentage: 5, unit: "credits" },
     });
-    vi.mocked(startDaemon).mockReset();
-    vi.mocked(startDaemon).mockResolvedValueOnce({ getUsageInfo, stop } as never);
+    const startDaemon = vi.fn().mockResolvedValueOnce({ getUsageInfo, stop } as never);
 
-    const adapter = new QoderAdapter();
+    const adapter = new QoderAdapter(async () => ({ startDaemon }));
     const reading = await adapter.usage(home);
     expect(reading).toMatchObject({
       error: null,
       routingEligible: false,
       windows: [{ id: "plan_credits", label: "Plan Credits (100/2000)", usedPercent: 5 }],
     });
-    expect(vi.mocked(startDaemon)).toHaveBeenCalledWith(
+    expect(startDaemon).toHaveBeenCalledWith(
       expect.objectContaining({
         launchMode: "process",
         auth: { type: "accessToken", accessToken: "pat-secret" },
@@ -252,7 +249,7 @@ describe("QoderAdapter", () => {
     expect(stop).toHaveBeenCalledTimes(1);
 
     const stopOnError = vi.fn().mockResolvedValue(undefined);
-    vi.mocked(startDaemon).mockResolvedValueOnce({
+    startDaemon.mockResolvedValueOnce({
       getUsageInfo: vi.fn().mockRejectedValue(new Error("secret-error")),
       stop: stopOnError,
     } as never);
