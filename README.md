@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/wwu-git/paseo-accounts/actions/workflows/ci.yml/badge.svg)](https://github.com/wwu-git/paseo-accounts/actions/workflows/ci.yml)
 
-Use several Claude, ChatGPT (Codex), GitHub Copilot, Kimi Code, OpenCode Go, Pi, Oh My Pi and Cursor subscriptions side by side in [Paseo](https://paseo.sh), without logging in and out of the CLI.
+Use several Claude, ChatGPT (Codex), GitHub Copilot, Kimi Code, OpenCode Go, Pi, Oh My Pi, Cursor and Google Antigravity subscriptions side by side in [Paseo](https://paseo.sh), without logging in and out of the CLI.
 
 ![Paseo Accounts](images/accounts-dark.png)
 
@@ -13,15 +13,15 @@ Use several Claude, ChatGPT (Codex), GitHub Copilot, Kimi Code, OpenCode Go, Pi,
 - **Automatic failover.** When an account hits its 5-hour or weekly limit, the agent moves to the account with the most room left and carries on. New agents skip exhausted accounts.
 - **Ultra plans.** Claude Max 20x accounts show as Ultra. Verified Ultra accounts have no 5-hour limit in Claude Code, so they only show weekly limits.
 - **Live usage.** Each account shows its own 5-hour and weekly usage and when they reset. Accounts in use refresh about every minute and after each turn, and a limit shows up the moment it hits.
-- **In Paseo's Usage view.** On Paseo 0.12 and later, every account shows up in Paseo's own Usage view and `paseo usage`, next to Paseo's built-in sources.
+- **In Paseo's Usage view.** On Paseo 0.12 and later, every added account—plus your signed-in Google Antigravity CLI login—shows up in Paseo's own Usage view and `paseo usage`, next to Paseo's built-in sources.
 - **Start an agent on a named account.** `paseo run --env PASEO_ACCOUNT=Work "…"` from scripts and schedules. The name matches any case; use the account id if two share a name.
 - **Claude extra usage.** An account with paid extra usage shows its budget left. Optionally, agents use it once every other account is full, instead of stopping.
 - **Banked resets.** If a provider has banked limit resets on an account, you can use one from the account card or the agent's account button.
 - **Signed-out accounts stand out.** On Paseo 0.12 and later, the sidebar's **Accounts** item shows how many accounts need signing in again.
 - **Set an account aside.** Disable an account for a while and its agents move to your other accounts, then come back when you enable it again.
 - **Several hosts.** Each Paseo host keeps its own accounts, and the Accounts screen says which host you're looking at.
-- **Fork to another provider (optional).** When every account of a provider is out, a stopped chat can carry on in a new agent on the next provider with a free account (ChatGPT, then Kimi Code, then OpenCode, Copilot, Pi, Oh My Pi), then any other provider Paseo has available on the host.
-- **Copilot, Kimi Code, OpenCode Go, Pi and Oh My Pi.** Add accounts for any provider installed on the host from **Add account** at the top. A provider only gets a section (and a line in the summary) once it runs agents or has an account you added. Kimi accounts sign in with `kimi login`, show 5-hour and monthly usage, and switch on limits like Claude.
+- **Fork to another provider (optional).** When every account of a provider is out, a stopped chat can carry on in a new agent on the next provider with a free account (Claude, ChatGPT, Kimi Code, OpenCode, Copilot, Pi, Oh My Pi, Cursor, Antigravity), then any other provider Paseo has available on the host.
+- **Copilot, Kimi Code, OpenCode Go, Pi, Oh My Pi, Cursor and Google Antigravity.** Add accounts for supported providers installed on the host from **Add account** at the top. A provider only gets a section (and a line in the summary) once it runs agents, has a ready CLI login, or has an account you added. Kimi accounts sign in with `kimi login`, show 5-hour and monthly usage, and switch on limits like Claude; Google Antigravity shows read-only CLI subscription pools directly from `agy`.
 - **Project folders.** Dedicate an account to one or more folders: agents working there use it, and no other agent moves onto it.
 - **Everything else stays the same.** Every account shares your settings, skills, plugins, MCP servers, `CLAUDE.md`/`AGENTS.md` and conversation history.
 
@@ -123,6 +123,15 @@ Oh My Pi keeps several accounts per provider itself and switches between them wh
 - Automatic failover recognizes explicit Cursor usage-limit/authentication failures. Ordinary rate limits and network errors do not trigger it. Real dual-account and quota-exhaustion testing remains outstanding.
 - Profiles with their own credentials, custom endpoints or unsupported wrapper commands are not managed. Multiple browser logins and ordinary terminal account wrappers are not included.
 
+### Google Antigravity
+
+- Requires the official Antigravity CLI (`agy`) installed and signed in on the daemon host. Tested locally with Paseo 0.16.1 and `agy` 1.5.12 on Linux.
+- Your signed-in `agy` CLI login is discovered automatically and appears in both **Accounts** and Paseo's native **Usage** view (`paseo usage`), including per-session usage lookups.
+- Usage is read locally through `agy --print "/usage" --output-format json --print-timeout 15s`, which is handled directly by the CLI with zero model token usage and no session created. The plugin never reads or exports Google OAuth credentials and makes no undocumented internal HTTP calls.
+- Shows every model-pool window and reset time returned by the CLI (such as Gemini Models 5-hour/Weekly, Claude and GPT models 5-hour/Weekly, and Gemini 4 Argon Weekly), with concise short labels (`Gem 5h`, `Gem wk`, `3P 5h`, `3P wk`, `Argon wk`) in Paseo's Usage summary.
+- Model pools are independent and display-only (`routingEligible: false`): they never mark the whole account limited, drive forecasts, or trigger automatic switching. Readings refresh at most once per minute and are marked stale after five minutes; error messages never expose raw CLI output.
+- Multiple managed Antigravity accounts, sign-in/sign-out flows, and profiles that bring their own credentials (`GEMINI_API_KEY`, `GOOGLE_API_KEY`, `GOOGLE_APPLICATION_CREDENTIALS`) are not managed here. Sign in or out in the `agy` CLI directly.
+
 ### Before the limit, restart check and alerts
 
 - **Switch early** (Settings → Before the limit, a number from 50 to 99, default 92% used; 100 turns it off): when an agent's turn ends on an account that full, it moves to the account with the most room before its next turn, so it doesn't stop halfway through a task. It only moves to an account that's below the line itself, never onto another project's dedicated account, and leaves agents you put on an account yourself.
@@ -155,7 +164,7 @@ Some plans come with banked limit resets: ChatGPT's reset credits, and Claude Co
 paseo-accounts tries these in order, and a timeline note says which one happened:
 
 1. **Use a banked reset**, if you turned on **Use banked resets when every account is out**.
-2. **Fork the chat to another provider**, if you turned on **When every account is out, fork the chat to another provider** (off by default). A stopped chat continues on the next provider with a free account, in the order Claude, ChatGPT, Kimi Code, OpenCode, Copilot, Pi, Oh My Pi (skipping the chat's own provider), then any other provider Paseo lists as available — custom providers included, with no account binding:
+2. **Fork the chat to another provider**, if you turned on **When every account is out, fork the chat to another provider** (off by default). A stopped chat continues on the next provider with a free account, in the order Claude, ChatGPT, Kimi Code, OpenCode, Copilot, Pi, Oh My Pi, Cursor, Antigravity (skipping the chat's own provider), then any other provider Paseo lists as available — custom providers included, with no account binding:
    - The new agent opens in the same workspace with the conversation so far and goes straight back to work. It uses that provider's default model and its account with the most room left.
    - Where the provider has permission modes, the fork gets the mode closest to the original's without allowing more. A provider with nothing as careful as the original is skipped, and one with no modes at all (like Pi) runs with its own defaults. paseo-accounts never gives a fork more freedom than you gave the original.
    - The original agent stays as it was, and prompting it again while its provider is still out points to the same fork rather than starting another.
@@ -194,7 +203,7 @@ paseo-accounts never implements OAuth itself and never copies credentials betwee
 ## Privacy and security
 
 - Credentials stay in the CLIs' own stores. The registry (`$PASEO_HOME/paseo-accounts/state.json`) holds only account names, emails, plans and which agent uses which account.
-- To show Claude usage, paseo-accounts reads each account's current access token and calls Anthropic's usage endpoint, the same way Paseo's built-in usage display and `/usage` do. It never logs or stores tokens and never refreshes them itself. When you refresh usage (the ↻ button beside the title) or use a reset and a token has expired, it runs `claude -p /usage` so Claude Code renews its own sign-in. Codex usage comes from `codex app-server`.
+- To show Claude usage, paseo-accounts reads each account's current access token and calls Anthropic's usage endpoint, the same way Paseo's built-in usage display and `/usage` do. It never logs or stores tokens and never refreshes them itself. When you refresh usage (the ↻ button beside the title) or use a reset and a token has expired, it runs `claude -p /usage` so Claude Code renews its own sign-in. Codex usage comes from `codex app-server`; Google Antigravity usage comes from `agy --print "/usage" --output-format json` without reading OAuth credentials or surfacing raw CLI errors.
 - Using a banked reset calls the provider's own reset endpoint with that account's sign-in, and only after you confirm (or turn on automatic use).
 - Removing an account moves its agents to the default account, then signs it out (`claude auth logout` / `codex` logout) and deletes its home. This happens once no agent is mid-turn on it. Abandoned sign-ins are cleaned up the same way.
 - An account that still has ChatGPT conversations on it can't be removed until you archive them or continue them elsewhere, because they can't move.
@@ -231,7 +240,7 @@ paseo plugin logs paseo-accounts
 Code layout:
 
 - `client/`: React Native UI (Accounts surface, sign-in modal, composer pill, commands, timeline note).
-- `server/`: routing, account homes, Claude and Codex adapters, failover.
+- `server/`: routing, account homes, provider adapters, usage sources, failover.
 - `shared/`: RPC contracts and the view model.
 
 Report problems at [github.com/wwu-git/paseo-accounts/issues](https://github.com/wwu-git/paseo-accounts/issues).
