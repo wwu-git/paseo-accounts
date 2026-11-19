@@ -1489,7 +1489,9 @@ export class Service {
       const account = findAccount(await this.store.read(), accountId);
       if (!account) return;
       const spacing = this.adapters[account.family].usageSpacingMs;
-      if (since < (force ? spacing : Math.max(spacing, 60_000))) return;
+      const previous = this.usage.get(accountId);
+      const retryingError = force && (!previous || previous.error !== null || previous.windows.length === 0);
+      if (!retryingError && since < (force ? spacing : Math.max(spacing, 60_000))) return;
       this.usageAttemptAt.set(accountId, Date.now());
       const { retryAt, ...usage } = await this.adapters[account.family]
         .usage(account.home, { renewLogin })

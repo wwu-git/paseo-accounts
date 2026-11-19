@@ -186,4 +186,20 @@ describe("OpenCode Go accounts", () => {
     expect(vi.mocked(run).mock.calls.some(([,args]) => args[0] === "api")).toBe(false);
   });
 
+  it("retries integration.get when OpenCode cold-boots an evicted location (initial 404)", async () => {
+    usageResponse(allowance());
+    const original = vi.mocked(run).getMockImplementation()!;
+    let integrationAttempts = 0;
+    vi.mocked(run).mockImplementation(async (...args) => {
+      if (args[1].includes("integration.get") && ++integrationAttempts <= 2) {
+        return { code: 1, stdout: "", stderr: "HTTP 404 Not Found", timedOut: false };
+      }
+      return original(...args);
+    });
+    const usage = await new OpenCodeAdapter(0).usage(null);
+    expect(usage.error).toBeNull();
+    expect(usage.windows).toHaveLength(3);
+    expect(integrationAttempts).toBe(4);
+  });
+
 });

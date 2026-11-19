@@ -62,6 +62,8 @@ export class OpenCodeAdapter implements FamilyAdapter {
   readonly usageSpacingMs = 60_000;
   private nativeAccounts: boolean | undefined;
 
+  constructor(private readonly coldBootRetryMs = 2_000) {}
+
   private async usesNativeAccounts(): Promise<boolean> {
     if (this.nativeAccounts !== undefined) return this.nativeAccounts;
     const { command, prefix } = await providerCommand("opencode");
@@ -124,13 +126,20 @@ export class OpenCodeAdapter implements FamilyAdapter {
       if (!await this.usesNativeAccounts()) return empty("Usage requires OpenCode 2 and a Console login.");
       const { command, prefix } = await providerCommand("opencode");
       // Connection IDs are public metadata. A change during the request invalidates the result.
-      const connections = async () => {
-        const result = await run(command, [...prefix, "api", "integration.get", "--param", "integrationID=opencode"], { timeoutMs: 20_000 });
-        if (result.code !== 0) throw new Error("connections unavailable");
-        const metadata = ConsoleConnectionsSchema.parse(JSON.parse(result.stdout));
-        return metadata.data.connections.filter(c => c.type === "credential").map(c => c.id ?? "").sort();
+      // When `opencode serve --service` cold-boots an idle-evicted location, `GET /api/integration/opencode`
+      // returns HTTP 404 (exit code 1) for ~3–4s until `provider.updated` finishes loading in the background.
+      const connections = async (retries = 0) => {
+        for (let attempt = 0; ; attempt += 1) {
+          const result = await run(command, [...prefix, "api", "integration.get", "--param", "integrationID=opencode"], { timeoutMs: 20_000 });
+          if (result.code === 0) {
+            const metadata = ConsoleConnectionsSchema.parse(JSON.parse(result.stdout));
+            return metadata.data.connections.filter(c => c.type === "credential").map(c => c.id ?? "").sort();
+          }
+          if (result.timedOut || attempt >= retries) throw new Error("connections unavailable");
+          if (this.coldBootRetryMs > 0) await new Promise((resolve) => setTimeout(resolve, this.coldBootRetryMs));
+        }
       };
-      const before = await connections();
+      const before = await connections(2);
       const result = await run(command, [...prefix, "api", "experimental.usage.limits"], { timeoutMs: 20_000 });
       if (result.timedOut) return empty("OpenCode Console usage query timed out. Try refreshing again.");
       if (result.code !== 0) return empty("OpenCode Console usage is unavailable. Check the CLI connection and try refreshing again.");
