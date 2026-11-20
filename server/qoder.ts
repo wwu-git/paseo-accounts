@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { accessSync, constants, existsSync } from "node:fs";
-import { readFile, rm } from "node:fs/promises";
+import { mkdir, readFile, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, delimiter, isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -20,8 +20,8 @@ import {
 } from "./adapter";
 import { providerCommand, quietBrowserDir } from "./binaries";
 import { prepareQoderHome } from "./homes";
-import { readJson, writeJsonAtomic } from "./json-file";
-import { paseoHome } from "./paths";
+import { Mutex, readJson, writeJsonAtomic } from "./json-file";
+import { dataDir, paseoHome } from "./paths";
 import { run, stripAnsi } from "./process";
 
 const PAT_PAGE = "https://qoder.com/account/integrations";
@@ -29,6 +29,8 @@ const FRESH_MS = 5 * 60_000;
 const SOURCE_LABEL = "Qoder CLI";
 const TOKEN_KEYS = ["QODER_PERSONAL_ACCESS_TOKEN", "QODER_PAT", "QODER_ACCESS_TOKEN"] as const;
 const unsigned = (): Identity => ({ signedIn: false, email: null, plan: null, organization: null, identity: null });
+/** Serializes temporary `TMPDIR` override while the SDK writes its one-shot auth payload file. */
+const sdkStartLock = new Mutex();
 
 async function patAt(home: string): Promise<string | null> {
   try {
@@ -302,15 +304,27 @@ export class QoderAdapter implements FamilyAdapter {
     try {
       const { startDaemon } = await this.loadSdk();
       const patch = await this.env(home);
-      const env = spawnEnv(patch);
+      const tmpDir = join(dataDir(), "tmp");
+      await mkdir(tmpDir, { recursive: true, mode: 0o700 });
+      const env = { ...spawnEnv(patch), TMPDIR: tmpDir };
       const pat = home ? await patAt(home) : null;
       const auth = pat ? ({ type: "accessToken", accessToken: pat } as const) : ({ type: "qodercli" } as const);
-      daemon = await startDaemon({
-        launchMode: "process",
-        pathToQoderCLIExecutable: cliPath,
-        auth,
-        env,
-        initializeTimeoutMs: 15_000,
+      // Avoid /tmp quota exhaustion (EDQUOT) when the SDK writes its one-shot auth payload via os.tmpdir().
+      daemon = await sdkStartLock.run(async () => {
+        const previousTmp = process.env.TMPDIR;
+        process.env.TMPDIR = tmpDir;
+        try {
+          return await startDaemon({
+            launchMode: "process",
+            pathToQoderCLIExecutable: cliPath,
+            auth,
+            env,
+            initializeTimeoutMs: 15_000,
+          });
+        } finally {
+          if (previousTmp === undefined) delete process.env.TMPDIR;
+          else process.env.TMPDIR = previousTmp;
+        }
       });
       const info = await daemon.getUsageInfo();
       const parsed = parseQoderUsage(info);

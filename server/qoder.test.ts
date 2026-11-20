@@ -243,7 +243,11 @@ describe("QoderAdapter", () => {
       expect.objectContaining({
         launchMode: "process",
         auth: { type: "accessToken", accessToken: "pat-secret" },
-        env: expect.objectContaining({ QODER_CONFIG_DIR: home, QODER_PERSONAL_ACCESS_TOKEN: "pat-secret" }),
+        env: expect.objectContaining({
+          QODER_CONFIG_DIR: home,
+          QODER_PERSONAL_ACCESS_TOKEN: "pat-secret",
+          TMPDIR: join(paseoTmp!, "paseo-accounts", "tmp"),
+        }),
       }),
     );
     expect(stop).toHaveBeenCalledTimes(1);
